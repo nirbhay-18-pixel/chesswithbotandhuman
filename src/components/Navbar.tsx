@@ -1,19 +1,23 @@
 import { useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useScrolled, useTheme } from "../hooks";
+import { goToSection } from "../nav";
 import { ArrowRightIcon, CloseIcon, KnightMark, MenuIcon, MoonIcon, SunIcon } from "./icons";
 
-const LINKS = [
-  { label: "Home", href: "#top" },
-  { label: "Play", href: "#play" },
-  { label: "Puzzles", href: "#puzzles" },
-  { label: "Learn", href: "#learn" },
-  { label: "Analysis", href: "#analysis" },
-  { label: "Profile", href: "#join" },
+type NavItem = { label: string } & ({ route: string } | { section: string });
+
+const NAV_ITEMS: NavItem[] = [
+  { label: "Home", route: "/" },
+  { label: "Play", route: "/play" },
+  { label: "Puzzles", section: "puzzles" },
+  { label: "Learn", section: "learn" },
+  { label: "Analysis", section: "analysis" },
+  { label: "Profile", section: "join" },
 ];
 
 export function Logo({ compact = false }: { compact?: boolean }) {
   return (
-    <a href="#top" className="group flex items-center gap-2.5" aria-label="ChessMaster home">
+    <Link to="/" className="group flex items-center gap-2.5" aria-label="ChessMaster home">
       <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brass-500 text-ink-950 shadow-[inset_0_1px_0_rgb(255_255_255/0.35)] transition-transform duration-300 group-hover:-rotate-6 group-hover:scale-105">
         <KnightMark className="h-[22px] w-[22px]" />
       </span>
@@ -22,7 +26,7 @@ export function Logo({ compact = false }: { compact?: boolean }) {
           Chess<span className="text-brass-600 dark:text-brass-400">Master</span>
         </span>
       )}
-    </a>
+    </Link>
   );
 }
 
@@ -30,6 +34,23 @@ export function Navbar() {
   const [theme, toggleTheme] = useTheme();
   const scrolled = useScrolled(16);
   const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+
+  const handleItem = (item: NavItem) => {
+    setOpen(false);
+    if ("route" in item) {
+      if (pathname === item.route) {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } else {
+        navigate(item.route);
+      }
+    } else {
+      goToSection(navigate, pathname, item.section);
+    }
+  };
+
+  const isActive = (item: NavItem) => "route" in item && pathname === item.route;
 
   return (
     <header className="fixed inset-x-0 top-0 z-50">
@@ -49,15 +70,23 @@ export function Navbar() {
           <Logo />
 
           <ul className="hidden items-center gap-1 lg:flex">
-            {LINKS.map((link) => (
-              <li key={link.label}>
-                <a
-                  href={link.href}
-                  className="group relative rounded-md px-3.5 py-2 text-[15px] font-medium text-ink-600 transition-colors duration-200 hover:text-ink-950 dark:text-ink-300 dark:hover:text-ink-100"
+            {NAV_ITEMS.map((item) => (
+              <li key={item.label}>
+                <button
+                  onClick={() => handleItem(item)}
+                  className={`group relative cursor-pointer rounded-md px-3.5 py-2 text-[15px] font-medium transition-colors duration-200 ${
+                    isActive(item)
+                      ? "text-brass-700 dark:text-brass-300"
+                      : "text-ink-600 hover:text-ink-950 dark:text-ink-300 dark:hover:text-ink-100"
+                  }`}
                 >
-                  {link.label}
-                  <span className="absolute inset-x-3.5 bottom-1 h-[2px] origin-left scale-x-0 rounded-full bg-brass-500 transition-transform duration-300 group-hover:scale-x-100" />
-                </a>
+                  {item.label}
+                  <span
+                    className={`absolute inset-x-3.5 bottom-1 h-[2px] origin-left rounded-full bg-brass-500 transition-transform duration-300 ${
+                      isActive(item) ? "scale-x-100" : "scale-x-0 group-hover:scale-x-100"
+                    }`}
+                  />
+                </button>
               </li>
             ))}
           </ul>
@@ -80,13 +109,13 @@ export function Navbar() {
               />
             </button>
 
-            <a
-              href="#join"
-              className="group hidden h-10 items-center gap-2 rounded-lg bg-brass-500 px-4.5 text-[15px] font-semibold text-ink-950 shadow-[0_8px_20px_-10px_rgb(207_159_61/0.7)] transition-all duration-300 hover:-translate-y-[2px] hover:bg-brass-400 sm:inline-flex"
+            <button
+              onClick={() => navigate("/play")}
+              className="group hidden h-10 cursor-pointer items-center gap-2 rounded-lg bg-brass-500 px-4.5 text-[15px] font-semibold text-ink-950 shadow-[0_8px_20px_-10px_rgb(207_159_61/0.7)] transition-all duration-300 hover:-translate-y-[2px] hover:bg-brass-400 sm:inline-flex"
             >
               Play now
               <ArrowRightIcon className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5" />
-            </a>
+            </button>
 
             <button
               onClick={() => setOpen((o) => !o)}
@@ -106,17 +135,20 @@ export function Navbar() {
           }`}
         >
           <ul className="rounded-xl border border-ink-900/10 bg-paper-50/95 p-3 shadow-lift backdrop-blur-md dark:border-ink-100/10 dark:bg-ink-900/95">
-            {LINKS.map((link, i) => (
-              <li key={link.label}>
-                <a
-                  href={link.href}
-                  onClick={() => setOpen(false)}
-                  className="flex items-center justify-between rounded-lg px-4 py-3 text-[15px] font-medium text-ink-700 transition-colors hover:bg-brass-500/10 hover:text-brass-700 dark:text-ink-200 dark:hover:text-brass-300"
+            {NAV_ITEMS.map((item, i) => (
+              <li key={item.label}>
+                <button
+                  onClick={() => handleItem(item)}
+                  className={`flex w-full cursor-pointer items-center justify-between rounded-lg px-4 py-3 text-[15px] font-medium transition-colors hover:bg-brass-500/10 hover:text-brass-700 dark:hover:text-brass-300 ${
+                    isActive(item)
+                      ? "text-brass-700 dark:text-brass-300"
+                      : "text-ink-700 dark:text-ink-200"
+                  }`}
                   style={{ transitionDelay: `${i * 20}ms` }}
                 >
-                  {link.label}
+                  {item.label}
                   <ArrowRightIcon className="h-4 w-4 opacity-40" />
-                </a>
+                </button>
               </li>
             ))}
           </ul>

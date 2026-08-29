@@ -93,6 +93,19 @@ export const PUZZLES: Puzzle[] = [
   },
 ];
 
+/* ---------------- shared helpers ---------------- */
+
+/** "e4" -> { col: 4, row: 4 } for board rendering */
+export function squareToCoords(name: string): { col: number; row: number } {
+  const [col, row] = sq(name);
+  return { col, row };
+}
+
+export const KIND_VALUE: Record<Kind, number> = { P: 1, N: 3, B: 3, R: 5, Q: 9, K: 0 };
+
+/** display order for captured-piece trays (most valuable first) */
+export const KIND_ORDER: Kind[] = ["Q", "R", "B", "N", "P"];
+
 /* ---------------- computer difficulty ---------------- */
 
 export const ENGINE_LEVELS = [

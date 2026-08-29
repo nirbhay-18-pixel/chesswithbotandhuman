@@ -1,7 +1,7 @@
 import { useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { Game, type GameHandle } from "./Game";
 import { ArrowRightIcon, DiamondIcon, KnightMark } from "./icons";
-import { useToast } from "./ui";
 
 const AVATARS = [
   { initials: "AR", tone: "bg-felt-500" },
@@ -11,7 +11,7 @@ const AVATARS = [
 ];
 
 export function Hero() {
-  const { push } = useToast();
+  const navigate = useNavigate();
   const gameRef = useRef<GameHandle>(null);
 
   const quickPlay = () => {
@@ -54,7 +54,7 @@ export function Hero() {
 
           <div className="animate-rise mt-9 flex flex-wrap items-center gap-4" style={{ animationDelay: "380ms" }}>
             <button
-              onClick={() => push("Scanning the queue for a worthy opponent… matchmaking lands in the next update.")}
+              onClick={() => navigate("/play")}
               className="group inline-flex h-[54px] cursor-pointer items-center gap-3 rounded-lg border border-brass-400/60 bg-brass-500 px-7 text-base font-bold tracking-tight text-ink-950 shadow-[0_14px_30px_-12px_rgb(207_159_61/0.7)] transition-all duration-300 hover:-translate-y-[3px] hover:bg-brass-400 active:translate-y-0"
             >
               Play Now

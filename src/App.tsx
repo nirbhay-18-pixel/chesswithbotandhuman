@@ -1,26 +1,31 @@
-import { Footer, JoinCta } from "./components/Closing";
-import { Features } from "./components/Features";
-import { Hero } from "./components/Hero";
-import { Learn } from "./components/Learn";
+import { useEffect } from "react";
+import { HashRouter, Route, Routes, useLocation } from "react-router-dom";
 import { Navbar } from "./components/Navbar";
-import { Stats } from "./components/Stats";
-import { Ticker } from "./components/Ticker";
 import { ToastProvider } from "./components/ui";
+import { HomePage } from "./pages/HomePage";
+import { PlayPage } from "./pages/PlayPage";
+
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, [pathname]);
+  return null;
+}
 
 export default function App() {
   return (
-    <ToastProvider>
-      <div className="bg-stage" aria-hidden="true" />
-      <Navbar />
-      <main>
-        <Hero />
-        <Ticker />
-        <Features />
-        <Learn />
-        <Stats />
-        <JoinCta />
-      </main>
-      <Footer />
-    </ToastProvider>
+    <HashRouter>
+      <ToastProvider>
+        <div className="bg-stage" aria-hidden="true" />
+        <ScrollToTop />
+        <Navbar />
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/play" element={<PlayPage />} />
+          <Route path="*" element={<HomePage />} />
+        </Routes>
+      </ToastProvider>
+    </HashRouter>
   );
 }

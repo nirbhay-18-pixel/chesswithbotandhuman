@@ -1,4 +1,6 @@
 import { useState, type FormEvent } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { goToSection } from "../nav";
 import { ArrowRightIcon, CheckIcon, DiscordIcon, KnightMark, TwitchIcon, XSocialIcon, YoutubeIcon } from "./icons";
 import { Logo } from "./Navbar";
 import { Reveal, useToast } from "./ui";
@@ -117,38 +119,49 @@ export function JoinCta() {
 
 /* ---------------- Footer ---------------- */
 
-const FOOTER_COLS: { title: string; links: { label: string; href?: string }[] }[] = [
+type FooterLink = { label: string } & ({ section: string } | { route: string } | { stub?: true });
+
+const FOOTER_COLS: { title: string; links: FooterLink[] }[] = [
   {
     title: "Play",
     links: [
-      { label: "Online chess", href: "#play" },
-      { label: "vs Computer", href: "#computer" },
-      { label: "Puzzles", href: "#puzzles" },
-      { label: "Analysis", href: "#analysis" },
+      { label: "Local match", route: "/play" },
+      { label: "vs Computer", section: "computer" },
+      { label: "Puzzles", section: "puzzles" },
+      { label: "Analysis", section: "analysis" },
     ],
   },
   {
     title: "Learn",
     links: [
-      { label: "Openings", href: "#learn" },
-      { label: "Tactics", href: "#learn" },
-      { label: "Endgames", href: "#learn" },
-      { label: "Coaches" },
+      { label: "Openings", section: "learn" },
+      { label: "Tactics", section: "learn" },
+      { label: "Endgames", section: "learn" },
+      { label: "Coaches", stub: true },
     ],
   },
   {
     title: "Club",
     links: [
-      { label: "Community" },
-      { label: "Streams" },
-      { label: "Tournaments" },
-      { label: "About" },
+      { label: "Community", stub: true },
+      { label: "Streams", stub: true },
+      { label: "Tournaments", stub: true },
+      { label: "About", stub: true },
     ],
   },
 ];
 
 export function Footer() {
   const { push } = useToast();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+
+  const handleLink = (link: FooterLink) => {
+    if ("route" in link) navigate(link.route);
+    else if ("section" in link) goToSection(navigate, pathname, link.section);
+    else push(`${link.label} arrives with the 1.0 release.`);
+  };
+
   const socials = [
     { label: "X", icon: XSocialIcon },
     { label: "Discord", icon: DiscordIcon },
@@ -186,23 +199,13 @@ export function Footer() {
               <ul className="mt-4 space-y-2.5">
                 {col.links.map((link) => (
                   <li key={link.label}>
-                    {link.href ? (
-                      <a
-                        href={link.href}
-                        className="group inline-flex items-center gap-1.5 text-[15px] font-medium text-ink-600 transition-colors hover:text-brass-700 dark:text-ink-300 dark:hover:text-brass-300"
-                      >
-                        <span className="h-[2px] w-0 bg-brass-500 transition-all duration-300 group-hover:w-3" />
-                        {link.label}
-                      </a>
-                    ) : (
-                      <button
-                        onClick={() => push(`${link.label} arrives with the 1.0 release.`)}
-                        className="group inline-flex cursor-pointer items-center gap-1.5 text-[15px] font-medium text-ink-600 transition-colors hover:text-brass-700 dark:text-ink-300 dark:hover:text-brass-300"
-                      >
-                        <span className="h-[2px] w-0 bg-brass-500 transition-all duration-300 group-hover:w-3" />
-                        {link.label}
-                      </button>
-                    )}
+                    <button
+                      onClick={() => handleLink(link)}
+                      className="group inline-flex cursor-pointer items-center gap-1.5 text-[15px] font-medium text-ink-600 transition-colors hover:text-brass-700 dark:text-ink-300 dark:hover:text-brass-300"
+                    >
+                      <span className="h-[2px] w-0 bg-brass-500 transition-all duration-300 group-hover:w-3" />
+                      {link.label}
+                    </button>
                   </li>
                 ))}
               </ul>
