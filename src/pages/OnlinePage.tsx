@@ -3,12 +3,11 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   applyRatingChange,
   eloDelta,
-  getSessionUser,
   makeGameId,
-  quickCreate,
   saveGame,
   type GameRecord,
 } from "../account";
+import { useAuth } from "../auth/AuthContext";
 import type { Side } from "../chess";
 import { MatchRoom, type GameOverInfo, type MatchHandle, type PlayerInfo } from "../game/MatchRoom";
 import {
@@ -35,12 +34,9 @@ export function OnlinePage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const { isFullscreen: isFs } = useFullscreen();
-  const sessionUser = getSessionUser();
+  const { user, ready, refresh, setUser } = useAuth();
 
-  const [phase, setPhase] = useState<Phase>(sessionUser ? "lobby" : "gate");
-  const [gateName, setGateName] = useState("");
-  const [gateError, setGateError] = useState<string | null>(null);
-  const [user, setUser] = useState(sessionUser);
+  const [phase, setPhase] = useState<Phase>("lobby");
 
   const [colorChoice, setColorChoice] = useState<ColorChoice>("w");
   const [joinCode, setJoinCode] = useState(params.get("code") ?? "");
@@ -162,16 +158,6 @@ export function OnlinePage() {
 
   /* ----- actions ----- */
 
-  const enterWithName = () => {
-    const res = quickCreate(gateName);
-    if (!res.ok || !res.user) {
-      setGateError(res.error ?? "Could not create that player.");
-      return;
-    }
-    setUser(res.user);
-    setPhase("lobby");
-  };
-
   const createGame = () => {
     const me = self();
     setRole("host");
@@ -280,8 +266,6 @@ export function OnlinePage() {
     const after = Math.max(100, me.rating + delta);
 
     if (user) {
-      applyRatingChange(user.username, after);
-      setUser({ ...user, rating: after });
       const record: GameRecord = {
         id: makeGameId(),
         mode: "online",
@@ -295,7 +279,12 @@ export function OnlinePage() {
         ratingBefore: me.rating,
         ratingAfter: after,
       };
-      saveGame(user.username, record);
+      // optimistic local update + async database write
+      setUser({ ...user, rating: after });
+      void applyRatingChange(user.id, after)
+        .then(() => saveGame(user.id, record))
+        .then(() => refresh())
+        .catch(() => undefined);
       setSavedRecord(record);
     }
     setRatingDelta(delta);
@@ -311,9 +300,19 @@ export function OnlinePage() {
     ? { name: startInfo.blackName, rating: startInfo.blackRating, kind: "human" }
     : null;
 
-  /* ----- gate (need a name) ----- */
+  /* ----- gate (signed-in players only) ----- */
 
-  if (phase === "gate") {
+  if (!ready) {
+    return (
+      <div className="mx-auto max-w-7xl px-4 pb-24 pt-40 text-center sm:px-6 lg:px-8">
+        <p className="animate-pulse font-mono text-[11px] uppercase tracking-[0.24em] text-ink-400">
+          Restoring your session…
+        </p>
+      </div>
+    );
+  }
+
+  if (!user) {
     return (
       <div className="mx-auto max-w-7xl px-4 pb-24 pt-28 sm:px-6 lg:px-8 lg:pt-36">
         <div className="mx-auto max-w-md rounded-xl border border-ink-900/10 bg-paper-50/85 p-7 shadow-card backdrop-blur-sm dark:border-ink-100/10 dark:bg-ink-800/75">
@@ -321,30 +320,18 @@ export function OnlinePage() {
             <GlobeIcon className="h-4 w-4" /> Play Online
           </p>
           <h1 className="mt-4 font-display text-3xl font-bold tracking-tight text-ink-950 dark:text-ink-100">
-            Pick a name to play online.
+            Log in to play online.
           </h1>
           <p className="mt-3 text-[15px] leading-relaxed text-ink-500 dark:text-ink-300">
-            Your name and rating travel with every move, so your opponent knows who they're facing.
+            Online games are tied to your ChessMaster account — your name and rating travel with
+            every move, and the result is saved to your history.
           </p>
-          <input
-            value={gateName}
-            onChange={(e) => setGateName(e.target.value)}
-            placeholder="e.g. coding boy"
-            maxLength={18}
-            className={`mt-5 h-12 w-full rounded-lg border bg-paper-100/60 px-4 text-[15px] font-medium text-ink-900 placeholder:text-ink-400 focus:outline-none focus:ring-2 dark:bg-ink-900/60 dark:text-ink-100 ${
-              gateError ? "border-blunder focus:ring-blunder/40" : "border-ink-900/15 focus:border-brass-500 focus:ring-brass-500/40 dark:border-ink-100/15"
-            }`}
-          />
-          {gateError && <p className="mt-2 text-sm font-medium text-blunder">{gateError}</p>}
           <button
-            onClick={enterWithName}
-            className="mt-4 inline-flex h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-brass-500 text-base font-bold text-ink-950 transition-all duration-300 hover:-translate-y-[2px] hover:bg-brass-400"
+            onClick={() => navigate("/profile")}
+            className="mt-5 inline-flex h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-brass-500 text-base font-bold text-ink-950 transition-all duration-300 hover:-translate-y-[2px] hover:bg-brass-400"
           >
-            Use this name
+            Sign in or create an account
             <ArrowRightIcon className="h-4 w-4" />
-          </button>
-          <button onClick={() => navigate("/profile")} className="mt-3 w-full cursor-pointer text-center font-mono text-[11px] uppercase tracking-[0.16em] text-ink-400 transition-colors hover:text-brass-600 dark:hover:text-brass-300">
-            or log in with an existing account
           </button>
         </div>
       </div>

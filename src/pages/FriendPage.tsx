@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getSessionUser, makeGameId, saveGame, type GameRecord } from "../account";
+import { makeGameId, saveGame, type GameRecord } from "../account";
+import { useAuth } from "../auth/AuthContext";
 import type { Side } from "../chess";
 import { MatchRoom, type GameOverInfo, type MatchHandle } from "../game/MatchRoom";
 import { ArrowRightIcon, UsersIcon } from "../components/icons";
@@ -14,7 +15,7 @@ function scoreOf(info: GameOverInfo): string {
 export function FriendPage() {
   const navigate = useNavigate();
   const { isFullscreen: isFs } = useFullscreen();
-  const session = getSessionUser();
+  const { user: session } = useAuth();
   const [phase, setPhase] = useState<"setup" | "game">("setup");
   const [player1, setPlayer1] = useState(session?.username ?? "");
   const [player2, setPlayer2] = useState("");
@@ -49,7 +50,7 @@ export function FriendPage() {
   };
 
   const handleSave = (info: GameOverInfo) => {
-    const user = getSessionUser();
+    const user = session;
     if (!user) return;
     // the logged-in player's perspective: match by name, else assume White (seat 1)
     const myColor: Side =
@@ -71,7 +72,7 @@ export function FriendPage() {
       score: scoreOf(info),
       sans: info.sans,
     };
-    saveGame(user.username, record);
+    void saveGame(user.id, record).catch(() => undefined);
     setSavedRecord(record);
     setSaveState("saved");
   };

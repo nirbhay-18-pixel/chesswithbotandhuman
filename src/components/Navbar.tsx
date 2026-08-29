@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../auth/AuthContext";
 import { useScrolled, useTheme } from "../hooks";
 import { goToSection } from "../nav";
 import { ArrowRightIcon, CloseIcon, KnightMark, MenuIcon, MoonIcon, SunIcon } from "./icons";
@@ -36,6 +37,7 @@ export function Navbar() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const { user } = useAuth();
 
   const handleItem = (item: NavItem) => {
     setOpen(false);
@@ -107,6 +109,28 @@ export function Navbar() {
                   theme === "light" ? "rotate-0 opacity-100" : "-rotate-90 opacity-0"
                 }`}
               />
+            </button>
+
+            <button
+              onClick={() => navigate("/profile")}
+              aria-label={user ? `Open ${user.username}'s profile` : "Sign in"}
+              title={user ? `${user.username} · ${user.rating}` : "Sign in"}
+              className={`flex h-10 cursor-pointer items-center gap-2 rounded-lg border px-2.5 transition-all duration-300 hover:-translate-y-[1px] ${
+                user
+                  ? "border-brass-500/50 bg-brass-500/10 hover:border-brass-500"
+                  : "border-ink-900/12 hover:border-brass-500/60 dark:border-ink-100/15"
+              }`}
+            >
+              <span
+                className={`flex h-6.5 w-6.5 min-w-6 items-center justify-center rounded-md text-[11px] font-bold ${
+                  user ? "bg-brass-500 text-ink-950" : "bg-ink-900/10 text-ink-500 dark:bg-ink-100/10 dark:text-ink-300"
+                }`}
+              >
+                {user ? user.username.slice(0, 2).toUpperCase() : "••"}
+              </span>
+              <span className="hidden max-w-[110px] truncate text-[13px] font-semibold text-ink-800 md:block dark:text-ink-100">
+                {user ? user.username : "Sign in"}
+              </span>
             </button>
 
             <button

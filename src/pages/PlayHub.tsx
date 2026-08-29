@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { getSessionUser } from "../account";
+import { useAuth } from "../auth/AuthContext";
 import { CpuIcon, GlobeIcon, RobotIcon, UsersIcon, ArrowRightIcon } from "../components/icons";
 import { Chip } from "../components/ui";
 
@@ -47,7 +47,7 @@ const MODES = [
 
 export function PlayHub() {
   const navigate = useNavigate();
-  const user = getSessionUser();
+  const { user } = useAuth();
 
   return (
     <div className="mx-auto max-w-7xl px-4 pb-24 pt-28 sm:px-6 lg:px-8 lg:pt-36">

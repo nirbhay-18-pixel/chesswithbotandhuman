@@ -3,11 +3,11 @@ import { useNavigate } from "react-router-dom";
 import {
   applyRatingChange,
   eloDelta,
-  getSessionUser,
   makeGameId,
   saveGame,
   type GameRecord,
 } from "../account";
+import { useAuth } from "../auth/AuthContext";
 import { BOT_PERSONAS, BOT_RATINGS, getEngineKind, subscribeEngineKind, warmupEngine, type EngineKind } from "../engine";
 import { MatchRoom, type GameOverInfo, type MatchHandle, type PlayerInfo } from "../game/MatchRoom";
 import type { Side } from "../chess";
@@ -42,14 +42,14 @@ export function BotPage() {
     warmupEngine();
   }, []);
 
-  const user = getSessionUser();
+  const { user, refresh } = useAuth();
   const botColor: Side = humanColor === "w" ? "b" : "w";
 
   const startGame = () => {
     warmupEngine(); // idempotent — already loaded by now, keeps the first move instant
     const resolved: Side = colorChoice === "random" ? (Math.random() < 0.5 ? "w" : "b") : colorChoice;
     setHumanColor(resolved);
-    startRatingRef.current = getSessionUser()?.rating ?? 1200;
+    startRatingRef.current = user?.rating ?? 1200;
     setRatingDelta(null);
     setSavedRecord(null);
     setPhase("game");
@@ -71,10 +71,9 @@ export function BotPage() {
     const delta = eloDelta(before, rating, scoreVal as 0 | 0.5 | 1);
     const after = Math.max(100, before + delta);
 
-    const session = getSessionUser();
+    const session = user;
     let record: GameRecord | null = null;
     if (session) {
-      applyRatingChange(session.username, after);
       record = {
         id: makeGameId(),
         mode: "bot",
@@ -89,14 +88,18 @@ export function BotPage() {
         ratingBefore: before,
         ratingAfter: after,
       };
-      saveGame(session.username, record);
+      // persist rating + game record to the database, then refresh the session user
+      void applyRatingChange(session.id, after)
+        .then(() => saveGame(session.id, record as GameRecord))
+        .then(() => refresh())
+        .catch(() => undefined);
     }
     setRatingDelta(session ? delta : null);
     setSavedRecord(record);
   };
 
   const rematch = () => {
-    startRatingRef.current = getSessionUser()?.rating ?? 1200;
+    startRatingRef.current = user?.rating ?? 1200;
     setRatingDelta(null);
     setSavedRecord(null);
     matchRef.current?.reset();

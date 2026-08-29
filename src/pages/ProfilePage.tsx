@@ -2,16 +2,14 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Chess, type PieceSymbol } from "chess.js";
 import {
+  AuthError,
   getHistory,
-  getSessionUser,
   getStats,
-  login,
-  logout,
-  signup,
   type GameRecord,
   type Mode,
-  type StoredUser,
+  type PlayerStats,
 } from "../account";
+import { useAuth } from "../auth/AuthContext";
 import type { Kind, Piece, Side } from "../chess";
 import { GLYPHS, squareToCoords } from "../chess";
 import { ChessBoard } from "../components/ChessBoard";
@@ -195,25 +193,32 @@ function ReplayModal({ record, onClose }: { record: GameRecord; onClose: () => v
 
 /* ---------------- auth form ---------------- */
 
-function AuthCard({ onDone }: { onDone: (u: StoredUser) => void }) {
+function AuthCard() {
+  const { login, signup, backend } = useAuth();
   const [tab, setTab] = useState<"login" | "signup">("login");
   const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    if (busy) return;
     setBusy(true);
     setError(null);
-    const res = tab === "login" ? await login(username, password) : await signup(username, password);
-    setBusy(false);
-    if (!res.ok || !res.user) {
-      setError(res.error ?? "Something went wrong.");
-      return;
+    try {
+      if (tab === "login") await login(email, password);
+      else await signup(email, password, username);
+    } catch (err) {
+      setError(err instanceof AuthError ? err.message : "Something went wrong — please try again.");
+    } finally {
+      setBusy(false);
     }
-    onDone(res.user);
   };
+
+  const inputCls =
+    "h-12 w-full rounded-lg border border-ink-900/15 bg-paper-100/60 px-4 text-[15px] font-medium text-ink-900 placeholder:text-ink-400 focus:border-brass-500 focus:outline-none focus:ring-2 focus:ring-brass-500/40 dark:border-ink-100/15 dark:bg-ink-900/60 dark:text-ink-100";
 
   return (
     <div className="mx-auto max-w-md rounded-xl border border-ink-900/10 bg-paper-50/85 p-7 shadow-card backdrop-blur-sm dark:border-ink-100/10 dark:bg-ink-800/75">
@@ -223,7 +228,11 @@ function AuthCard({ onDone }: { onDone: (u: StoredUser) => void }) {
         </span>
         <div>
           <h1 className="font-display text-2xl font-bold tracking-tight text-ink-950 dark:text-ink-100">Your club card.</h1>
-          <p className="text-[13px] text-ink-500 dark:text-ink-300">Accounts live on this device — games save to your history.</p>
+          <p className="text-[13px] text-ink-500 dark:text-ink-300">
+            {backend === "supabase"
+              ? "Secure account — your rating and every game sync to the cloud."
+              : "Secure account — your rating and every game are saved to the database."}
+          </p>
         </div>
       </div>
 
@@ -245,28 +254,43 @@ function AuthCard({ onDone }: { onDone: (u: StoredUser) => void }) {
       </div>
 
       <form onSubmit={submit} className="mt-5 space-y-3">
+        {tab === "signup" && (
+          <input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="Username"
+            maxLength={18}
+            autoComplete="username"
+            className={inputCls}
+          />
+        )}
         <input
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          placeholder="Username"
-          maxLength={18}
-          className="h-12 w-full rounded-lg border border-ink-900/15 bg-paper-100/60 px-4 text-[15px] font-medium text-ink-900 placeholder:text-ink-400 focus:border-brass-500 focus:outline-none focus:ring-2 focus:ring-brass-500/40 dark:border-ink-100/15 dark:bg-ink-900/60 dark:text-ink-100"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="Email"
+          autoComplete="email"
+          className={inputCls}
         />
         <input
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Password"
-          className="h-12 w-full rounded-lg border border-ink-900/15 bg-paper-100/60 px-4 text-[15px] font-medium text-ink-900 placeholder:text-ink-400 focus:border-brass-500 focus:outline-none focus:ring-2 focus:ring-brass-500/40 dark:border-ink-100/15 dark:bg-ink-900/60 dark:text-ink-100"
+          autoComplete={tab === "login" ? "current-password" : "new-password"}
+          className={inputCls}
         />
         {error && <p className="text-sm font-medium text-blunder">{error}</p>}
         <button
           type="submit"
           disabled={busy}
-          className="h-12 w-full cursor-pointer rounded-lg bg-brass-500 text-base font-bold text-ink-950 transition-all duration-300 hover:-translate-y-[2px] hover:bg-brass-400 disabled:opacity-50"
+          className="h-12 w-full cursor-pointer rounded-lg bg-brass-500 text-base font-bold text-ink-950 transition-all duration-300 hover:-translate-y-[2px] hover:bg-brass-400 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {busy ? "One moment…" : tab === "login" ? "Log in" : "Create account"}
         </button>
+        <p className="text-center font-mono text-[10px] uppercase tracking-[0.14em] text-ink-400">
+          Passwords are salted &amp; hashed — never stored in plain text
+        </p>
       </form>
     </div>
   );
@@ -284,33 +308,69 @@ const TABS = [
 export function ProfilePage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [user, setUser] = useState<StoredUser | null>(() => getSessionUser());
+  const { user, ready, logout } = useAuth();
   const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("all");
   const [replay, setReplay] = useState<GameRecord | null>(null);
+  const [history, setHistory] = useState<GameRecord[]>([]);
+  const [stats, setStats] = useState<PlayerStats | null>(null);
+  const [loadingData, setLoadingData] = useState(false);
 
-  const history = useMemo(() => (user ? getHistory(user.username) : []), [user]);
-  const stats = useMemo(() => (user ? getStats(user.username) : null), [user]);
+  // load this account's history + stats whenever the signed-in user changes
+  useEffect(() => {
+    if (!user) {
+      setHistory([]);
+      setStats(null);
+      return;
+    }
+    let cancelled = false;
+    setLoadingData(true);
+    Promise.all([getHistory(user.id), getStats(user.id, user.rating)])
+      .then(([h, s]) => {
+        if (cancelled) return;
+        setHistory(h);
+        setStats(s);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) setLoadingData(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   // deep-link from "View Game"
   useEffect(() => {
     const target = (location.state as { replay?: string } | null)?.replay;
-    if (target && user) {
-      const record = getHistory(user.username).find((g) => g.id === target);
+    if (target && user && history.length > 0) {
+      const record = history.find((g) => g.id === target);
       if (record) setReplay(record);
       navigate(location.pathname, { replace: true, state: null });
     }
-  }, [location, user, navigate]);
+  }, [location, user, history, navigate]);
 
-  if (!user || !stats) {
+  // restoring a persisted session on first load
+  if (!ready) {
+    return (
+      <div className="mx-auto max-w-7xl px-4 pb-24 pt-40 text-center sm:px-6 lg:px-8">
+        <p className="animate-pulse font-mono text-[11px] uppercase tracking-[0.24em] text-ink-400">
+          Restoring your session…
+        </p>
+      </div>
+    );
+  }
+
+  // protected page — must be signed in
+  if (!user) {
     return (
       <div className="mx-auto max-w-7xl px-4 pb-24 pt-28 sm:px-6 lg:px-8 lg:pt-36">
-        <AuthCard onDone={setUser} />
+        <AuthCard />
       </div>
     );
   }
 
   const filtered = tab === "all" ? history : history.filter((g) => g.mode === tab);
-  const winRate = stats.games > 0 ? Math.round((stats.wins / stats.games) * 100) : 0;
+  const winRate = stats && stats.games > 0 ? Math.round((stats.wins / stats.games) * 100) : 0;
 
   return (
     <div className="mx-auto max-w-7xl px-4 pb-24 pt-28 sm:px-6 lg:px-8 lg:pt-36">
@@ -329,10 +389,7 @@ export function ProfilePage() {
           </div>
         </div>
         <button
-          onClick={() => {
-            logout();
-            setUser(null);
-          }}
+          onClick={() => void logout()}
           className="cursor-pointer rounded-lg border border-ink-900/15 px-4 py-2 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-600 transition-colors hover:border-blunder hover:text-blunder dark:border-ink-100/15 dark:text-ink-300"
         >
           Log out
@@ -342,10 +399,10 @@ export function ProfilePage() {
       {/* stats */}
       <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
         {[
-          { label: "Rating", value: String(stats.rating) },
-          { label: "Games", value: String(stats.games) },
-          { label: "Wins", value: String(stats.wins) },
-          { label: "Losses", value: String(stats.losses) },
+          { label: "Rating", value: String(stats?.rating ?? user.rating) },
+          { label: "Games", value: String(stats?.games ?? 0) },
+          { label: "Wins", value: String(stats?.wins ?? 0) },
+          { label: "Losses", value: String(stats?.losses ?? 0) },
           { label: "Win rate", value: `${winRate}%` },
         ].map((s, i) => (
           <div key={s.label} className="animate-rise rounded-xl border border-ink-900/10 bg-paper-50/85 p-5 shadow-card backdrop-blur-sm dark:border-ink-100/10 dark:bg-ink-800/75" style={{ animationDelay: `${i * 60}ms` }}>
@@ -358,7 +415,14 @@ export function ProfilePage() {
       {/* history */}
       <div className="mt-10">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <h2 className="font-display text-2xl font-bold tracking-tight text-ink-950 dark:text-ink-100">Game History</h2>
+          <div className="flex items-baseline gap-3">
+            <h2 className="font-display text-2xl font-bold tracking-tight text-ink-950 dark:text-ink-100">Game History</h2>
+            {loadingData && (
+              <span className="animate-pulse font-mono text-[10px] uppercase tracking-[0.18em] text-ink-400">
+                loading…
+              </span>
+            )}
+          </div>
           <div className="flex gap-2 rounded-lg border border-ink-900/10 p-1 dark:border-ink-100/10">
             {TABS.map((t) => (
               <button
