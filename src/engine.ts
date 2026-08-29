@@ -24,12 +24,16 @@ export interface EngineResult {
 export interface LevelConfig {
   name: string;
   elo: number;
-  /** stockfish `go depth` */
+  /** max search depth — secondary strength cap (`go ... depth N`) */
   sfDepth: number;
-  /** stockfish Skill Level 0–20 */
+  /** stockfish Skill Level 0–20 — primary weakness/strength control */
   sfSkill: number;
-  /** hard cap before we send `stop` (ms) */
-  sfTimeMs: number;
+  /**
+   * `go movetime N` — the hard per-move time bound. Stockfish self-terminates
+   * at exactly N ms (or the depth cap, whichever comes first), so responses
+   * are fast and predictable instead of relying on an external `stop`.
+   */
+  sfMoveMs: number;
   /** classic engine settings */
   clDepth: number;
   clTimeMs: number;
@@ -37,16 +41,16 @@ export interface LevelConfig {
 }
 
 export const LEVELS: LevelConfig[] = [
-  { name: "Pawn",        elo: 400,  sfDepth: 1,  sfSkill: 0,  sfTimeMs: 1200, clDepth: 1, clTimeMs: 250,  clTopK: 5 },
-  { name: "Squire",      elo: 600,  sfDepth: 1,  sfSkill: 1,  sfTimeMs: 1200, clDepth: 1, clTimeMs: 350,  clTopK: 4 },
-  { name: "Knight",      elo: 800,  sfDepth: 2,  sfSkill: 2,  sfTimeMs: 1500, clDepth: 2, clTimeMs: 500,  clTopK: 3 },
-  { name: "Rook",        elo: 1000, sfDepth: 3,  sfSkill: 4,  sfTimeMs: 1800, clDepth: 2, clTimeMs: 700,  clTopK: 2 },
-  { name: "Bishop",      elo: 1200, sfDepth: 4,  sfSkill: 6,  sfTimeMs: 2200, clDepth: 3, clTimeMs: 900,  clTopK: 2 },
-  { name: "Queen",       elo: 1400, sfDepth: 5,  sfSkill: 8,  sfTimeMs: 2800, clDepth: 3, clTimeMs: 1200, clTopK: 1 },
-  { name: "Candidate",   elo: 1550, sfDepth: 6,  sfSkill: 11, sfTimeMs: 3500, clDepth: 3, clTimeMs: 1600, clTopK: 1 },
-  { name: "Master",      elo: 1700, sfDepth: 8,  sfSkill: 14, sfTimeMs: 4500, clDepth: 4, clTimeMs: 2000, clTopK: 1 },
-  { name: "Grandmaster", elo: 1850, sfDepth: 10, sfSkill: 17, sfTimeMs: 6000, clDepth: 4, clTimeMs: 2600, clTopK: 1 },
-  { name: "Nightmare",   elo: 2050, sfDepth: 12, sfSkill: 20, sfTimeMs: 8000, clDepth: 4, clTimeMs: 3200, clTopK: 1 },
+  { name: "Pawn",        elo: 400,  sfDepth: 2,  sfSkill: 0,  sfMoveMs: 300,  clDepth: 1, clTimeMs: 250,  clTopK: 5 },
+  { name: "Squire",      elo: 600,  sfDepth: 3,  sfSkill: 1,  sfMoveMs: 350,  clDepth: 1, clTimeMs: 350,  clTopK: 4 },
+  { name: "Knight",      elo: 800,  sfDepth: 4,  sfSkill: 3,  sfMoveMs: 450,  clDepth: 2, clTimeMs: 500,  clTopK: 3 },
+  { name: "Rook",        elo: 1000, sfDepth: 6,  sfSkill: 5,  sfMoveMs: 600,  clDepth: 2, clTimeMs: 700,  clTopK: 2 },
+  { name: "Bishop",      elo: 1200, sfDepth: 8,  sfSkill: 7,  sfMoveMs: 800,  clDepth: 3, clTimeMs: 900,  clTopK: 2 },
+  { name: "Queen",       elo: 1400, sfDepth: 10, sfSkill: 9,  sfMoveMs: 1000, clDepth: 3, clTimeMs: 1200, clTopK: 1 },
+  { name: "Candidate",   elo: 1550, sfDepth: 12, sfSkill: 12, sfMoveMs: 1300, clDepth: 3, clTimeMs: 1600, clTopK: 1 },
+  { name: "Master",      elo: 1700, sfDepth: 14, sfSkill: 15, sfMoveMs: 1700, clDepth: 4, clTimeMs: 2000, clTopK: 1 },
+  { name: "Grandmaster", elo: 1850, sfDepth: 16, sfSkill: 18, sfMoveMs: 2200, clDepth: 4, clTimeMs: 2600, clTopK: 1 },
+  { name: "Nightmare",   elo: 2050, sfDepth: 18, sfSkill: 20, sfMoveMs: 2600, clDepth: 4, clTimeMs: 3200, clTopK: 1 },
 ];
 
 /* ---------------- rating-keyed configs (Bot mode) ---------------- */
@@ -71,17 +75,25 @@ export const BOT_PERSONAS: Record<number, string> = {
  * Skill Level and search depth scale monotonically with rating, and the
  * classic fallback engine mirrors the curve.
  */
+/**
+ * Response-time targets per rating band:
+ *   400–800  → ~0.25–0.5 s   1000–1400 → ~0.5–1 s
+ *   1600–1800 → ~1.3–1.7 s   2000–2200 → ~2.3–2.8 s
+ * Strength still scales monotonically: Skill Level, depth cap and thinking
+ * time all increase with rating, so higher bots are genuinely stronger —
+ * they just never exceed their movetime budget.
+ */
 export const RATING_CONFIG: Record<number, LevelConfig> = {
-  400:  { name: "Pawn",        elo: 400,  sfDepth: 1,  sfSkill: 0,  sfTimeMs: 1200, clDepth: 1, clTimeMs: 300,  clTopK: 6 },
-  600:  { name: "Squire",      elo: 600,  sfDepth: 1,  sfSkill: 1,  sfTimeMs: 1300, clDepth: 1, clTimeMs: 400,  clTopK: 4 },
-  800:  { name: "Knight",      elo: 800,  sfDepth: 2,  sfSkill: 3,  sfTimeMs: 1500, clDepth: 2, clTimeMs: 550,  clTopK: 3 },
-  1000: { name: "Rook",        elo: 1000, sfDepth: 3,  sfSkill: 5,  sfTimeMs: 1800, clDepth: 2, clTimeMs: 750,  clTopK: 2 },
-  1200: { name: "Bishop",      elo: 1200, sfDepth: 4,  sfSkill: 7,  sfTimeMs: 2200, clDepth: 3, clTimeMs: 1000, clTopK: 2 },
-  1400: { name: "Queen",       elo: 1400, sfDepth: 5,  sfSkill: 9,  sfTimeMs: 2800, clDepth: 3, clTimeMs: 1400, clTopK: 1 },
-  1600: { name: "Candidate",   elo: 1600, sfDepth: 7,  sfSkill: 12, sfTimeMs: 3500, clDepth: 4, clTimeMs: 1900, clTopK: 1 },
-  1800: { name: "Master",      elo: 1800, sfDepth: 9,  sfSkill: 15, sfTimeMs: 4800, clDepth: 4, clTimeMs: 2500, clTopK: 1 },
-  2000: { name: "Grandmaster", elo: 2000, sfDepth: 11, sfSkill: 18, sfTimeMs: 6500, clDepth: 4, clTimeMs: 3200, clTopK: 1 },
-  2200: { name: "Nightmare",   elo: 2200, sfDepth: 13, sfSkill: 20, sfTimeMs: 8500, clDepth: 4, clTimeMs: 3800, clTopK: 1 },
+  400:  { name: "Pawn",        elo: 400,  sfDepth: 2,  sfSkill: 0,  sfMoveMs: 300,  clDepth: 1, clTimeMs: 300,  clTopK: 6 },
+  600:  { name: "Squire",      elo: 600,  sfDepth: 3,  sfSkill: 1,  sfMoveMs: 350,  clDepth: 1, clTimeMs: 400,  clTopK: 4 },
+  800:  { name: "Knight",      elo: 800,  sfDepth: 4,  sfSkill: 3,  sfMoveMs: 500,  clDepth: 2, clTimeMs: 550,  clTopK: 3 },
+  1000: { name: "Rook",        elo: 1000, sfDepth: 6,  sfSkill: 5,  sfMoveMs: 650,  clDepth: 2, clTimeMs: 750,  clTopK: 2 },
+  1200: { name: "Bishop",      elo: 1200, sfDepth: 8,  sfSkill: 7,  sfMoveMs: 850,  clDepth: 3, clTimeMs: 1000, clTopK: 2 },
+  1400: { name: "Queen",       elo: 1400, sfDepth: 10, sfSkill: 9,  sfMoveMs: 1050, clDepth: 3, clTimeMs: 1400, clTopK: 1 },
+  1600: { name: "Candidate",   elo: 1600, sfDepth: 12, sfSkill: 12, sfMoveMs: 1400, clDepth: 4, clTimeMs: 1900, clTopK: 1 },
+  1800: { name: "Master",      elo: 1800, sfDepth: 14, sfSkill: 15, sfMoveMs: 1800, clDepth: 4, clTimeMs: 2500, clTopK: 1 },
+  2000: { name: "Grandmaster", elo: 2000, sfDepth: 16, sfSkill: 18, sfMoveMs: 2400, clDepth: 4, clTimeMs: 3200, clTopK: 1 },
+  2200: { name: "Nightmare",   elo: 2200, sfDepth: 18, sfSkill: 20, sfMoveMs: 2800, clDepth: 4, clTimeMs: 3800, clTopK: 1 },
 };
 
 const STOCKFISH_URLS = [
@@ -94,6 +106,10 @@ type LineListener = (line: string) => void;
 class StockfishWorker {
   private worker: Worker | null = null;
   private listeners = new Set<LineListener>();
+  /** monotonic token — only the newest search may resolve */
+  private searchSeq = 0;
+  /** cached Skill Level to avoid redundant UCI options per move */
+  private lastSkill = -1;
 
   async init(): Promise<boolean> {
     for (const url of STOCKFISH_URLS) {
@@ -171,33 +187,58 @@ class StockfishWorker {
   /**
    * Search a position defined by its full move history.
    * Reports live evaluations (centipawns, side-to-move perspective) via onEval.
+   *
+   * Speed & correctness guarantees:
+   *  - `go movetime N depth D` — Stockfish self-terminates after N ms (or at
+   *    depth D, whichever first), so thinking time is hard-bounded by rating.
+   *  - any in-flight search is `stop`ped before a new one begins, and a
+   *    sequence token makes sure a stale `bestmove` can never resolve a newer
+   *    search — exactly one search runs at a time per engine instance.
+   *  - the Skill Level UCI option is only re-sent when it changes.
    */
   search(
     uciMoves: string[],
     depth: number,
     skill: number,
-    timeCapMs: number,
+    moveTimeMs: number,
     onEval: (cpForSideToMove: number, mate: boolean) => void,
   ): Promise<string> {
     if (!this.worker) return Promise.reject(new Error("stockfish offline"));
 
+    // Cancel any previous search so it cannot keep burning CPU or emit a
+    // result for an outdated position, and drop its listener immediately.
+    this.post("stop");
+    this.listeners.clear();
+    const id = ++this.searchSeq;
+
     return new Promise((resolve, reject) => {
-      let stopTimer = 0;
       let guardTimer = 0;
+      // A stopped search emits its stale `bestmove` *before* the new search's
+      // first `info` line (UCI processes `stop` → `bestmove`, then `go` →
+      // `info…`). Only accept a `bestmove` once this search has produced its
+      // own `info` output, so a superseded result can never resolve us.
+      let sawOwnInfo = false;
 
       const cleanup = () => {
         this.listeners.delete(onLine);
-        window.clearTimeout(stopTimer);
         window.clearTimeout(guardTimer);
       };
 
       const onLine: LineListener = (line) => {
+        // A superseded search's trailing output must never leak through.
+        if (id !== this.searchSeq) {
+          cleanup();
+          return;
+        }
         if (line.startsWith("info") && line.includes("score")) {
+          sawOwnInfo = true;
           const cpMatch = line.match(/score cp (-?\d+)/);
           const mateMatch = line.match(/score mate (-?\d+)/);
           if (cpMatch) onEval(parseInt(cpMatch[1], 10), false);
           else if (mateMatch) onEval(parseInt(mateMatch[1], 10) > 0 ? 9000 : -9000, true);
         } else if (line.startsWith("bestmove")) {
+          // Ignore a stale `bestmove` from a search we just stopped.
+          if (!sawOwnInfo) return;
           const move = line.split(" ")[1];
           cleanup();
           if (move && move !== "(none)") resolve(move);
@@ -207,17 +248,20 @@ class StockfishWorker {
 
       this.listeners.add(onLine);
 
-      this.post(`setoption name Skill Level value ${skill}`);
+      if (skill !== this.lastSkill) {
+        this.post(`setoption name Skill Level value ${skill}`);
+        this.lastSkill = skill;
+      }
       this.post(`setoption name Ponder value false`);
       this.post(`position startpos moves ${uciMoves.join(" ")}`);
-      this.post(`go depth ${depth}`);
+      // Bounded search: engine stops at moveTimeMs OR depth, whichever first.
+      this.post(`go movetime ${moveTimeMs} depth ${depth}`);
 
-      // hard cap: ask the engine to stop and return its best-so-far
-      stopTimer = window.setTimeout(() => this.post("stop"), timeCapMs);
+      // movetime self-terminates; this is only a safety net for a wedged engine.
       guardTimer = window.setTimeout(() => {
         cleanup();
         reject(new Error("search timeout"));
-      }, timeCapMs + 6000);
+      }, moveTimeMs + 2000);
     });
   }
 }
@@ -240,6 +284,17 @@ export function initEngine(): Promise<EngineKind> {
 
 export function getEngineKind(): EngineKind | null {
   return kind;
+}
+
+/**
+ * Begin loading Stockfish in the background. Call this as soon as the user
+ * commits to a bot game (not on the homepage) so the download, worker startup
+ * and UCI handshake are already done by the time the first move is needed.
+ * Idempotent — the engine instance is created once and reused for the whole
+ * session, so repeated calls are free.
+ */
+export function warmupEngine(): void {
+  void initEngine();
 }
 
 /* ---------------- engine-state subscriptions ---------------- */
@@ -311,22 +366,32 @@ async function runSearch(
   uciMoves: string[],
   onEval: (whiteCp: number) => void,
 ): Promise<EngineResult> {
-  // Never stall the game waiting for the Stockfish download: if it is not
-  // ready within 2.5s, use the classic engine for this move. Once Stockfish
-  // finishes loading, every following move automatically uses it.
-  const activeKind = await Promise.race<EngineKind>([
-    initEngine(),
-    new Promise<EngineKind>((resolve) =>
-      window.setTimeout(() => resolve(getEngineKind() ?? "classic"), 2500),
-    ),
-  ]);
+  // Decide which engine to use — without ever blocking an already-loaded one.
+  let activeKind: EngineKind;
+  if (kind === "stockfish" && sf?.alive) {
+    // Hot path: the engine is warm, search immediately (no race, no wait).
+    activeKind = "stockfish";
+  } else if (kind === "classic") {
+    // A previous attempt already failed to load Stockfish — don't retry per move.
+    activeKind = "classic";
+  } else {
+    // Engine not decided yet: wait for it, but cap the wait so the UI never stalls.
+    // Once Stockfish finishes loading, every following move takes the hot path.
+    activeKind = await Promise.race<EngineKind>([
+      initEngine(),
+      new Promise<EngineKind>((resolve) =>
+        window.setTimeout(() => resolve(getEngineKind() ?? "classic"), 2500),
+      ),
+    ]);
+  }
+
   const turn = fen.split(" ")[1];
   const toWhite = (cp: number) => (turn === "b" ? -cp : cp);
 
   if (activeKind === "stockfish" && sf?.alive) {
     try {
       let lastCp = 20;
-      const rawUci = await sf.search(uciMoves, cfg.sfDepth, cfg.sfSkill, cfg.sfTimeMs, (cp: number, mate: boolean) => {
+      const rawUci = await sf.search(uciMoves, cfg.sfDepth, cfg.sfSkill, cfg.sfMoveMs, (cp: number, mate: boolean) => {
         lastCp = mate ? cp : Math.max(-1200, Math.min(1200, cp));
         onEval(Math.round(toWhite(lastCp)) / 100);
       });

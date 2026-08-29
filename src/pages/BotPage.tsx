@@ -8,7 +8,7 @@ import {
   saveGame,
   type GameRecord,
 } from "../account";
-import { BOT_PERSONAS, BOT_RATINGS, getEngineKind, subscribeEngineKind, type EngineKind } from "../engine";
+import { BOT_PERSONAS, BOT_RATINGS, getEngineKind, subscribeEngineKind, warmupEngine, type EngineKind } from "../engine";
 import { MatchRoom, type GameOverInfo, type MatchHandle, type PlayerInfo } from "../game/MatchRoom";
 import type { Side } from "../chess";
 import { ArrowRightIcon, CpuIcon, DiceIcon, RobotIcon } from "../components/icons";
@@ -34,10 +34,17 @@ export function BotPage() {
 
   useEffect(() => subscribeEngineKind(setEngineKind), []);
 
+  // Begin loading Stockfish as soon as the user enters the bot flow, so the
+  // download + worker startup + UCI handshake finish before the first move.
+  useEffect(() => {
+    warmupEngine();
+  }, []);
+
   const user = getSessionUser();
   const botColor: Side = humanColor === "w" ? "b" : "w";
 
   const startGame = () => {
+    warmupEngine(); // idempotent — already loaded by now, keeps the first move instant
     const resolved: Side = colorChoice === "random" ? (Math.random() < 0.5 ? "w" : "b") : colorChoice;
     setHumanColor(resolved);
     startRatingRef.current = getSessionUser()?.rating ?? 1200;
