@@ -117,6 +117,65 @@ export function UsersIcon({ className }: IconProps) {
   );
 }
 
+/** Coding Boy — the house engine bot. Little terminal-headed robot. */
+export function RobotIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <rect x="4.5" y="7.5" width="15" height="11" rx="2.5" />
+      <path d="M12 7.5V4.8M12 4.8h.01M9.2 18.5v1.8M14.8 18.5v1.8" />
+      <circle cx="12" cy="4.4" r="0.9" fill="currentColor" stroke="none" />
+      <path d="m8.2 11.4-1.5 1.6 1.5 1.6M15.8 11.4l1.5 1.6-1.5 1.6M13 10.9l-2 4.2" strokeWidth="1.4" />
+    </svg>
+  );
+}
+
+export function FlipIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <path d="M4 8.5h13M14 5l3.5 3.5L14 12" />
+      <path d="M20 15.5H7M10 12l-3.5 3.5L10 19" />
+    </svg>
+  );
+}
+
+export function UndoIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <path d="M8.5 5 4 9.5 8.5 14" />
+      <path d="M4 9.5h10a6 6 0 0 1 0 12h-3" />
+    </svg>
+  );
+}
+
+export function FlagIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <path d="M5.5 21V3.8" />
+      <path d="M5.5 4.5c4.5-2.4 8 2.3 13 0v9c-5 2.3-8.5-2.4-13 0" />
+    </svg>
+  );
+}
+
+export function DiceIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" className={className} aria-hidden="true">
+      <rect x="4" y="4" width="16" height="16" rx="3.5" />
+      <circle cx="9" cy="9" r="1.15" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="15" r="1.15" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="9" r="1.15" fill="currentColor" stroke="none" />
+      <circle cx="9" cy="15" r="1.15" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+export function RefreshIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <path d="M20 12a8 8 0 1 1-2.5-5.8M20 3.5V8h-4.5" />
+    </svg>
+  );
+}
+
 export function CheckIcon({ className }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">

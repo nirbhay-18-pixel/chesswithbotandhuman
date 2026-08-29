@@ -1,9 +1,13 @@
 import type { Piece } from "../chess";
-import { FILES, GLYPHS } from "../chess";
+import { FILES, GLYPHS, squareName } from "../chess";
 
 export interface Square {
   col: number;
   row: number;
+}
+
+export interface Target extends Square {
+  capture: boolean;
 }
 
 interface ChessBoardProps {
@@ -15,6 +19,14 @@ interface ChessBoardProps {
   fading?: Set<string>;
   className?: string;
   frameClassName?: string;
+  /** render from Black's point of view */
+  flipped?: boolean;
+  /** enable click handling + selection/target rendering */
+  interactive?: boolean;
+  onSquareClick?: (square: Square) => void;
+  selected?: Square | null;
+  targets?: Target[];
+  checkSquare?: Square | null;
 }
 
 const LIGHT_SQUARE = "#e9e1cb";
@@ -29,7 +41,18 @@ export function ChessBoard({
   fading,
   className = "",
   frameClassName = "",
+  flipped = false,
+  interactive = false,
+  onSquareClick,
+  selected = null,
+  targets = [],
+  checkSquare = null,
 }: ChessBoardProps) {
+  // board coords -> display coords
+  const d = (v: number) => (flipped ? 7 - v : v);
+  // display coords -> board coords
+  const b = (v: number) => (flipped ? 7 - v : v);
+
   const isLastMove = (col: number, row: number) =>
     lastMove !== null &&
     ((lastMove.from.col === col && lastMove.from.row === row) ||
@@ -37,6 +60,12 @@ export function ChessBoard({
 
   const isHighlighted = (col: number, row: number) =>
     highlights.some((h) => h.col === col && h.row === row);
+
+  const targetAt = (col: number, row: number) =>
+    targets.find((t) => t.col === col && t.row === row);
+
+  const isSelected = (col: number, row: number) =>
+    selected !== null && selected.col === col && selected.row === row;
 
   return (
     <div
@@ -47,8 +76,10 @@ export function ChessBoard({
       {/* squares */}
       <div className="absolute inset-0 grid grid-cols-8 grid-rows-8">
         {Array.from({ length: 64 }, (_, i) => {
-          const col = i % 8;
-          const row = Math.floor(i / 8);
+          const dc = i % 8;
+          const dr = Math.floor(i / 8);
+          const col = b(dc);
+          const row = b(dr);
           const light = (col + row) % 2 === 0;
           return (
             <div
@@ -56,13 +87,23 @@ export function ChessBoard({
               className="relative"
               style={{ backgroundColor: light ? LIGHT_SQUARE : DARK_SQUARE }}
             >
-              {isLastMove(col, row) && (
-                <div className="absolute inset-0 bg-brass-400/45" />
-              )}
+              {isLastMove(col, row) && <div className="absolute inset-0 bg-brass-400/45" />}
               {isHighlighted(col, row) && (
                 <div className="absolute inset-0 border-[3px] border-brass-400 bg-brass-400/20" />
               )}
-              {coords && col === 0 && (
+              {isSelected(col, row) && (
+                <div className="absolute inset-0 border-[3px] border-brass-500 bg-brass-400/35" />
+              )}
+              {checkSquare && checkSquare.col === col && checkSquare.row === row && (
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    background:
+                      "radial-gradient(circle, rgb(192 90 78 / 0.75) 12%, rgb(192 90 78 / 0.35) 55%, transparent 78%)",
+                  }}
+                />
+              )}
+              {coords && dc === 0 && (
                 <span
                   className="absolute left-[6%] top-[4%] font-mono text-[1.55cqw] font-bold"
                   style={{ color: light ? DARK_SQUARE : LIGHT_SQUARE }}
@@ -70,7 +111,7 @@ export function ChessBoard({
                   {8 - row}
                 </span>
               )}
-              {coords && row === 7 && (
+              {coords && dr === 7 && (
                 <span
                   className="absolute bottom-[3%] right-[6%] font-mono text-[1.55cqw] font-bold"
                   style={{ color: light ? DARK_SQUARE : LIGHT_SQUARE }}
@@ -84,9 +125,11 @@ export function ChessBoard({
       </div>
 
       {/* pieces */}
-      <div className="absolute inset-0">
+      <div className="pointer-events-none absolute inset-0">
         {pieces.map((piece) => {
           const gone = fading?.has(piece.id) ?? false;
+          const dc = d(piece.col);
+          const dr = d(piece.row);
           return (
             <div
               key={piece.id}
@@ -94,7 +137,7 @@ export function ChessBoard({
                 gone ? "z-10 scale-[0.55] opacity-0" : "z-20"
               }`}
               style={{
-                transform: `translate(${piece.col * 100}%, ${piece.row * 100}%)${gone ? " scale(0.55)" : ""}`,
+                transform: `translate(${dc * 100}%, ${dr * 100}%)${gone ? " scale(0.55)" : ""}`,
               }}
             >
               <span
@@ -107,6 +150,29 @@ export function ChessBoard({
           );
         })}
       </div>
+
+      {/* move targets */}
+      {targets.length > 0 && (
+        <div className="pointer-events-none absolute inset-0 z-30 grid grid-cols-8 grid-rows-8">
+          {Array.from({ length: 64 }, (_, i) => {
+            const col = b(i % 8);
+            const row = b(Math.floor(i / 8));
+            const t = targetAt(col, row);
+            if (!t) return <div key={i} />;
+            return (
+              <div key={i} className="relative">
+                {t.capture ? (
+                  <div className="absolute inset-[4%] rounded-full border-[0.55cqw] border-brass-500/90" />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="block h-[28%] w-[28%] rounded-full bg-ink-950/25" />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* arrow overlay */}
       {arrow && (
@@ -142,7 +208,33 @@ export function ChessBoard({
             fill="var(--color-brass-400)"
             opacity="0.9"
           />
-        </svg>
+          </svg>
+      )}
+
+      {/* click layer */}
+      {interactive && (
+        <div className="absolute inset-0 z-40 grid grid-cols-8 grid-rows-8">
+          {Array.from({ length: 64 }, (_, i) => {
+            const dc = i % 8;
+            const dr = Math.floor(i / 8);
+            const col = b(dc);
+            const row = b(dr);
+            const t = targetAt(col, row);
+            return (
+              <button
+                key={i}
+                type="button"
+                aria-label={squareName(col, row)}
+                onClick={() => onSquareClick?.({ col, row })}
+                className={`block h-full w-full ${
+                  t ? "cursor-pointer" : "cursor-default"
+                } transition-colors duration-150 ${
+                  interactive ? "hover:bg-paper-50/15" : ""
+                } focus-visible:outline focus-visible:outline-2 focus-visible:outline-brass-400`}
+              />
+            );
+          })}
+        </div>
       )}
     </div>
   );

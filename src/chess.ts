@@ -32,54 +32,6 @@ export function squareName(col: number, row: number): string {
   return `${FILES[col]}${8 - row}`;
 }
 
-export function initialPieces(): Piece[] {
-  const pieces: Piece[] = [];
-  const back: Kind[] = ["R", "N", "B", "Q", "K", "B", "N", "R"];
-  back.forEach((kind, col) => {
-    pieces.push({ id: `b${kind}${col}`, side: "b", kind, col, row: 0 });
-    pieces.push({ id: `w${kind}${col}`, side: "w", kind, col, row: 7 });
-  });
-  for (let col = 0; col < 8; col++) {
-    pieces.push({ id: `bP${col}`, side: "b", kind: "P", col, row: 1 });
-    pieces.push({ id: `wP${col}`, side: "w", kind: "P", col, row: 6 });
-  }
-  return pieces;
-}
-
-export interface ScriptMove {
-  from: [number, number];
-  to: [number, number];
-  /** SAN notation for the move list */
-  san: string;
-  /** evaluation in pawns, from White's point of view */
-  evalCp: number;
-}
-
-const m = (from: string, to: string, san: string, evalCp: number): ScriptMove => ({
-  from: sq(from),
-  to: sq(to),
-  san,
-  evalCp,
-});
-
-/** The Italian Game, played out move by move in the hero board. */
-export const OPENING_SCRIPT: ScriptMove[] = [
-  m("e2", "e4", "e4", 0.25),
-  m("e7", "e5", "e5", 0.2),
-  m("g1", "f3", "Nf3", 0.3),
-  m("b8", "c6", "Nc6", 0.25),
-  m("f1", "c4", "Bc4", 0.35),
-  m("f8", "c5", "Bc5", 0.3),
-  m("c2", "c3", "c3", 0.3),
-  m("g8", "f6", "Nf6", 0.4),
-  m("d2", "d4", "d4", 0.55),
-  m("e5", "d4", "exd4", 0.45),
-  m("c3", "d4", "cxd4", 0.5),
-  m("c5", "b4", "Bb4+", 0.6),
-  m("b1", "c3", "Nc3", 0.65),
-  m("d7", "d6", "d6", 0.6),
-];
-
 export function evalToWhitePct(evalCp: number): number {
   return Math.round(Math.min(88, Math.max(12, 50 + evalCp * 24)));
 }
