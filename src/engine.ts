@@ -49,6 +49,41 @@ export const LEVELS: LevelConfig[] = [
   { name: "Nightmare",   elo: 2050, sfDepth: 12, sfSkill: 20, sfTimeMs: 8000, clDepth: 4, clTimeMs: 3200, clTopK: 1 },
 ];
 
+/* ---------------- rating-keyed configs (Bot mode) ---------------- */
+
+export const BOT_RATINGS = [400, 600, 800, 1000, 1200, 1400, 1600, 1800, 2000, 2200] as const;
+
+export const BOT_PERSONAS: Record<number, string> = {
+  400: "Pawn",
+  600: "Squire",
+  800: "Knight",
+  1000: "Rook",
+  1200: "Bishop",
+  1400: "Queen",
+  1600: "Candidate",
+  1800: "Master",
+  2000: "Grandmaster",
+  2200: "Nightmare",
+};
+
+/**
+ * The chosen rating genuinely changes engine behaviour: Stockfish's
+ * Skill Level and search depth scale monotonically with rating, and the
+ * classic fallback engine mirrors the curve.
+ */
+export const RATING_CONFIG: Record<number, LevelConfig> = {
+  400:  { name: "Pawn",        elo: 400,  sfDepth: 1,  sfSkill: 0,  sfTimeMs: 1200, clDepth: 1, clTimeMs: 300,  clTopK: 6 },
+  600:  { name: "Squire",      elo: 600,  sfDepth: 1,  sfSkill: 1,  sfTimeMs: 1300, clDepth: 1, clTimeMs: 400,  clTopK: 4 },
+  800:  { name: "Knight",      elo: 800,  sfDepth: 2,  sfSkill: 3,  sfTimeMs: 1500, clDepth: 2, clTimeMs: 550,  clTopK: 3 },
+  1000: { name: "Rook",        elo: 1000, sfDepth: 3,  sfSkill: 5,  sfTimeMs: 1800, clDepth: 2, clTimeMs: 750,  clTopK: 2 },
+  1200: { name: "Bishop",      elo: 1200, sfDepth: 4,  sfSkill: 7,  sfTimeMs: 2200, clDepth: 3, clTimeMs: 1000, clTopK: 2 },
+  1400: { name: "Queen",       elo: 1400, sfDepth: 5,  sfSkill: 9,  sfTimeMs: 2800, clDepth: 3, clTimeMs: 1400, clTopK: 1 },
+  1600: { name: "Candidate",   elo: 1600, sfDepth: 7,  sfSkill: 12, sfTimeMs: 3500, clDepth: 4, clTimeMs: 1900, clTopK: 1 },
+  1800: { name: "Master",      elo: 1800, sfDepth: 9,  sfSkill: 15, sfTimeMs: 4800, clDepth: 4, clTimeMs: 2500, clTopK: 1 },
+  2000: { name: "Grandmaster", elo: 2000, sfDepth: 11, sfSkill: 18, sfTimeMs: 6500, clDepth: 4, clTimeMs: 3200, clTopK: 1 },
+  2200: { name: "Nightmare",   elo: 2200, sfDepth: 13, sfSkill: 20, sfTimeMs: 8500, clDepth: 4, clTimeMs: 3800, clTopK: 1 },
+};
+
 const STOCKFISH_URLS = [
   "https://cdn.jsdelivr.net/npm/stockfish.js@10.0.2/stockfish.js",
   "https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.2/stockfish.js",
@@ -254,6 +289,28 @@ export async function analyze(
   onEval: (whiteCp: number) => void,
 ): Promise<EngineResult> {
   const cfg = LEVELS[Math.min(LEVELS.length - 1, Math.max(0, level - 1))];
+  return runSearch(cfg, fen, uciMoves, onEval);
+}
+
+/** Analyze at a specific bot rating (400–2200). */
+export async function analyzeAtRating(
+  fen: string,
+  uciMoves: string[],
+  rating: number,
+  onEval: (whiteCp: number) => void,
+): Promise<EngineResult> {
+  const cfg =
+    RATING_CONFIG[rating] ??
+    RATING_CONFIG[BOT_RATINGS.reduce((best, r) => (Math.abs(r - rating) < Math.abs(best - rating) ? r : best))];
+  return runSearch(cfg, fen, uciMoves, onEval);
+}
+
+async function runSearch(
+  cfg: LevelConfig,
+  fen: string,
+  uciMoves: string[],
+  onEval: (whiteCp: number) => void,
+): Promise<EngineResult> {
   // Never stall the game waiting for the Stockfish download: if it is not
   // ready within 2.5s, use the classic engine for this move. Once Stockfish
   // finishes loading, every following move automatically uses it.

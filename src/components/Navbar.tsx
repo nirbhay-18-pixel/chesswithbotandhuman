@@ -12,7 +12,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Puzzles", section: "puzzles" },
   { label: "Learn", section: "learn" },
   { label: "Analysis", section: "analysis" },
-  { label: "Profile", section: "join" },
+  { label: "Profile", route: "/profile" },
 ];
 
 export function Logo({ compact = false }: { compact?: boolean }) {

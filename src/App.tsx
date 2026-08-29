@@ -2,8 +2,12 @@ import { useEffect } from "react";
 import { HashRouter, Route, Routes, useLocation } from "react-router-dom";
 import { Navbar } from "./components/Navbar";
 import { ToastProvider } from "./components/ui";
+import { BotPage } from "./pages/BotPage";
+import { FriendPage } from "./pages/FriendPage";
 import { HomePage } from "./pages/HomePage";
-import { PlayPage } from "./pages/PlayPage";
+import { OnlinePage } from "./pages/OnlinePage";
+import { PlayHub } from "./pages/PlayHub";
+import { ProfilePage } from "./pages/ProfilePage";
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -22,7 +26,11 @@ export default function App() {
         <Navbar />
         <Routes>
           <Route path="/" element={<HomePage />} />
-          <Route path="/play" element={<PlayPage />} />
+          <Route path="/play" element={<PlayHub />} />
+          <Route path="/play/bot" element={<BotPage />} />
+          <Route path="/play/friend" element={<FriendPage />} />
+          <Route path="/play/online" element={<OnlinePage />} />
+          <Route path="/profile" element={<ProfilePage />} />
           <Route path="*" element={<HomePage />} />
         </Routes>
       </ToastProvider>

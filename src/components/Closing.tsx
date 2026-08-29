@@ -125,10 +125,10 @@ const FOOTER_COLS: { title: string; links: FooterLink[] }[] = [
   {
     title: "Play",
     links: [
-      { label: "Local match", route: "/play" },
-      { label: "vs Computer", section: "computer" },
-      { label: "Puzzles", section: "puzzles" },
-      { label: "Analysis", section: "analysis" },
+      { label: "Play hub", route: "/play" },
+      { label: "vs Bot", route: "/play/bot" },
+      { label: "With a friend", route: "/play/friend" },
+      { label: "Online", route: "/play/online" },
     ],
   },
   {
