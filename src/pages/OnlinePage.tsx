@@ -21,6 +21,7 @@ import {
   type StartInfo,
 } from "../online";
 import { ArrowRightIcon, GlobeIcon, UsersIcon } from "../components/icons";
+import { useFullscreen } from "../hooks";
 
 type Phase = "gate" | "lobby" | "waiting" | "connecting" | "game";
 type ColorChoice = "w" | "b" | "random";
@@ -33,6 +34,7 @@ function scoreOf(info: GameOverInfo): string {
 export function OnlinePage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
+  const { isFullscreen: isFs } = useFullscreen();
   const sessionUser = getSessionUser();
 
   const [phase, setPhase] = useState<Phase>(sessionUser ? "lobby" : "gate");
@@ -495,8 +497,14 @@ export function OnlinePage() {
   /* ----- game ----- */
 
   return (
-    <div className="mx-auto max-w-7xl px-4 pb-24 pt-24 sm:px-6 lg:px-8 lg:pt-32">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+    <div
+      className={
+        isFs
+          ? "flex h-[100dvh] flex-col px-3 pb-3 pt-20 sm:px-5 sm:pb-4 sm:pt-24"
+          : "mx-auto max-w-7xl px-4 pb-24 pt-24 sm:px-6 lg:px-8 lg:pt-32"
+      }
+    >
+      <div className={`flex flex-wrap items-center justify-between gap-4 ${isFs ? "mb-3 shrink-0" : "mb-6"}`}>
         <div>
           <p className="flex items-center gap-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.24em] text-brass-700 dark:text-brass-300">
             <GlobeIcon className="h-4 w-4" /> Online · Room {code}

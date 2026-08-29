@@ -4,6 +4,7 @@ import { getSessionUser, makeGameId, saveGame, type GameRecord } from "../accoun
 import type { Side } from "../chess";
 import { MatchRoom, type GameOverInfo, type MatchHandle } from "../game/MatchRoom";
 import { ArrowRightIcon, UsersIcon } from "../components/icons";
+import { useFullscreen } from "../hooks";
 
 function scoreOf(info: GameOverInfo): string {
   if (!info.winner) return "½–½";
@@ -12,6 +13,7 @@ function scoreOf(info: GameOverInfo): string {
 
 export function FriendPage() {
   const navigate = useNavigate();
+  const { isFullscreen: isFs } = useFullscreen();
   const session = getSessionUser();
   const [phase, setPhase] = useState<"setup" | "game">("setup");
   const [player1, setPlayer1] = useState(session?.username ?? "");
@@ -82,8 +84,14 @@ export function FriendPage() {
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-4 pb-24 pt-28 sm:px-6 lg:px-8 lg:pt-36">
-      <header className="flex flex-wrap items-end justify-between gap-6">
+    <div
+      className={
+        isFs
+          ? "flex h-[100dvh] flex-col px-3 pb-3 pt-20 sm:px-5 sm:pb-4 sm:pt-24"
+          : "mx-auto max-w-7xl px-4 pb-24 pt-28 sm:px-6 lg:px-8 lg:pt-36"
+      }
+    >
+      <header className={`flex flex-wrap items-end justify-between gap-6 ${isFs ? "hidden" : ""}`}>
         <div>
           <button
             onClick={() => (phase === "game" ? setPhase("setup") : navigate("/play"))}
@@ -161,7 +169,7 @@ export function FriendPage() {
           </div>
         </div>
       ) : (
-        <div className="animate-rise mt-10" style={{ animationDelay: "120ms" }}>
+        <div className={isFs ? "flex min-h-0 flex-1 flex-col" : "animate-rise mt-10"} style={isFs ? undefined : { animationDelay: "120ms" }}>
           <MatchRoom
             ref={matchRef}
             mode="friend"

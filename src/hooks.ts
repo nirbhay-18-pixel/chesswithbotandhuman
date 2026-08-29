@@ -1,5 +1,73 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+/* ---------------- fullscreen ---------------- */
+
+interface FullscreenDocument extends Document {
+  webkitFullscreenElement?: Element | null;
+  webkitExitFullscreen?: () => Promise<void>;
+}
+
+interface FullscreenHTMLElement extends HTMLElement {
+  webkitRequestFullscreen?: () => void;
+}
+
+/**
+ * Real browser Fullscreen API, applied to the document element so the whole
+ * app shell (toasts, navbar, theme) stays rendered and NO component state is
+ * lost — entering/exiting never resets the game, the engine or connections.
+ * The `fullscreenchange` event keeps `isFullscreen` authoritative at all
+ * times, including exits via the Escape key or browser UI.
+ */
+export function useFullscreen() {
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(
+    () => typeof document !== "undefined" && !!(document as FullscreenDocument).fullscreenElement,
+  );
+
+  useEffect(() => {
+    const sync = () =>
+      setIsFullscreen(
+        !!((document as FullscreenDocument).fullscreenElement ??
+          (document as FullscreenDocument).webkitFullscreenElement),
+      );
+    document.addEventListener("fullscreenchange", sync);
+    document.addEventListener("webkitfullscreenchange", sync);
+    return () => {
+      document.removeEventListener("fullscreenchange", sync);
+      document.removeEventListener("webkitfullscreenchange", sync);
+    };
+  }, []);
+
+  const supported =
+    typeof document !== "undefined" &&
+    (!!document.fullscreenEnabled ||
+      typeof (document.documentElement as FullscreenHTMLElement).webkitRequestFullscreen === "function");
+
+  const toggle = useCallback(async (): Promise<boolean> => {
+    const doc = document as FullscreenDocument;
+    const root = document.documentElement as FullscreenHTMLElement;
+    try {
+      if (doc.fullscreenElement || doc.webkitFullscreenElement) {
+        if (doc.fullscreenElement) await doc.exitFullscreen();
+        else await doc.webkitExitFullscreen?.();
+        return true;
+      }
+      if (typeof root.requestFullscreen === "function") {
+        await root.requestFullscreen({ navigationUI: "hide" });
+        return true;
+      }
+      if (typeof root.webkitRequestFullscreen === "function") {
+        root.webkitRequestFullscreen();
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  return { isFullscreen, toggle, supported };
+}
+
 /* ---------------- reduced motion ---------------- */
 
 export function usePrefersReducedMotion(): boolean {

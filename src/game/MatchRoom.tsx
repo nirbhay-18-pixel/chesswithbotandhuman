@@ -25,10 +25,13 @@ import {
   CpuIcon,
   FlagIcon,
   FlipIcon,
+  FullscreenIcon,
   RefreshIcon,
   RobotIcon,
   UndoIcon,
 } from "../components/icons";
+import { useFullscreen } from "../hooks";
+import { useToast } from "../components/ui";
 
 export type ResultKind = "checkmate" | "stalemate" | "draw" | "resign";
 
@@ -237,6 +240,14 @@ export const MatchRoom = forwardRef<MatchHandle, MatchRoomProps>(function MatchR
   const [version, setVersion] = useState(0);
   const bump = useCallback(() => setVersion((v) => v + 1), []);
 
+  /* ----- fullscreen mode ----- */
+  const { isFullscreen: isFs, toggle: toggleFs } = useFullscreen();
+  const { push } = useToast();
+  const handleToggleFs = useCallback(async () => {
+    const ok = await toggleFs();
+    if (!ok) push("Fullscreen isn't available in this browser.");
+  }, [toggleFs, push]);
+
   const [selected, setSelected] = useState<Square | null>(null);
   const [promotion, setPromotion] = useState<{ from: Square; to: Square } | null>(null);
   const [result, setResult] = useState<ResultInfo | null>(null);
@@ -267,6 +278,10 @@ export const MatchRoom = forwardRef<MatchHandle, MatchRoomProps>(function MatchR
       if (resignTimer.current) window.clearTimeout(resignTimer.current);
       // invalidate any in-flight engine search on unmount
       runRef.current++;
+      // never leave the browser stuck in fullscreen after leaving a game
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
     },
     [],
   );
@@ -670,15 +685,33 @@ export const MatchRoom = forwardRef<MatchHandle, MatchRoomProps>(function MatchR
   /* ----- render ----- */
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_372px] lg:items-start">
+    <div
+      className={
+        isFs
+          ? "grid min-h-0 flex-1 gap-3 overflow-y-auto sm:gap-4 landscape:max-lg:grid-cols-[minmax(0,1fr)_290px] landscape:max-lg:overflow-hidden lg:grid-cols-[minmax(0,1fr)_400px] lg:overflow-hidden"
+          : "grid gap-8 lg:grid-cols-[minmax(0,1fr)_372px] lg:items-start"
+      }
+    >
       {/* board column */}
-      <div className="mx-auto w-full max-w-[660px] lg:mx-0">
-        <div className="space-y-3">
+      <div
+        className={
+          isFs
+            ? "flex min-h-0 w-full flex-col justify-center gap-3 landscape:max-lg:h-full lg:h-full"
+            : "mx-auto w-full max-w-[660px] lg:mx-0"
+        }
+      >
+        <div className={isFs ? "flex min-h-0 flex-col justify-center gap-3" : "space-y-3"}>
           {statusSlot}
 
           <PlayerBar {...barOf(topSide)} />
 
-          <div className="relative">
+          <div
+            className={
+              isFs
+                ? "relative mx-auto w-[min(100%,max(17rem,calc(100dvh-16rem)))] shrink-0 landscape:max-lg:w-[min(100%,max(14rem,calc(100dvh-15rem)))] lg:w-[min(100%,max(20rem,calc(100dvh-17rem)))]"
+                : "relative"
+            }
+          >
             <div
               className={`overflow-hidden rounded-xl border shadow-lift transition-all duration-500 ${
                 gameOver
@@ -787,11 +820,27 @@ export const MatchRoom = forwardRef<MatchHandle, MatchRoomProps>(function MatchR
                 </div>
               </div>
             )}
+
+            {/* quick exit chip while in fullscreen */}
+            {isFs && (
+              <button
+                onClick={handleToggleFs}
+                aria-label="Exit full screen"
+                className="absolute right-2 top-2 z-50 inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-ink-900/15 bg-paper-50/95 px-2.5 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wider text-ink-800 shadow-lift backdrop-blur transition-all duration-200 hover:-translate-y-[1px] hover:border-brass-500/60 hover:text-brass-700 dark:border-ink-100/15 dark:bg-ink-800/95 dark:text-ink-100 dark:hover:text-brass-300"
+              >
+                <FullscreenIcon className="h-3.5 w-3.5" />
+                Exit
+              </button>
+            )}
           </div>
 
           <PlayerBar {...barOf(bottomSide)} />
 
-          <p className="pt-1 text-center font-mono text-[10px] uppercase tracking-[0.18em] text-ink-400">
+          <p
+            className={`pt-1 text-center font-mono text-[10px] uppercase tracking-[0.18em] text-ink-400 ${
+              isFs ? "hidden" : ""
+            }`}
+          >
             {footerNote ??
               (mode === "bot"
                 ? "Click a piece — legal squares light up · Coding Boy answers for the other side"
@@ -801,9 +850,19 @@ export const MatchRoom = forwardRef<MatchHandle, MatchRoomProps>(function MatchR
       </div>
 
       {/* side panel */}
-      <aside className="space-y-5 lg:sticky lg:top-28">
+      <aside
+        className={
+          isFs
+            ? "flex min-h-0 flex-col gap-4 overflow-y-auto landscape:max-lg:pr-0.5 lg:overflow-y-auto"
+            : "space-y-5 lg:sticky lg:top-28"
+        }
+      >
         {/* status */}
-        <div className="rounded-xl border border-ink-900/10 bg-paper-50/85 p-5 shadow-card backdrop-blur-sm dark:border-ink-100/10 dark:bg-ink-800/75">
+        <div
+          className={`rounded-xl border border-ink-900/10 bg-paper-50/85 p-5 shadow-card backdrop-blur-sm dark:border-ink-100/10 dark:bg-ink-800/75 ${
+            isFs ? "shrink-0" : ""
+          }`}
+        >
           <p className="font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-ink-400">
             {gameOver ? "Result" : `Move ${moveNumber}`}
           </p>
@@ -864,14 +923,25 @@ export const MatchRoom = forwardRef<MatchHandle, MatchRoomProps>(function MatchR
         </div>
 
         {/* move list */}
-        <div className="rounded-xl border border-ink-900/10 bg-paper-50/85 p-5 shadow-card backdrop-blur-sm dark:border-ink-100/10 dark:bg-ink-800/75">
+        <div
+          className={`rounded-xl border border-ink-900/10 bg-paper-50/85 p-5 shadow-card backdrop-blur-sm dark:border-ink-100/10 dark:bg-ink-800/75 ${
+            isFs ? "flex min-h-0 flex-col lg:flex-1" : ""
+          }`}
+        >
           <div className="flex items-center justify-between">
             <p className="font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-ink-400">Moves</p>
             <p className="font-mono text-[10px] uppercase tracking-wider text-ink-400">
               {history.length} {history.length === 1 ? "ply" : "plies"}
             </p>
           </div>
-          <div ref={listRef} className="mt-3 h-48 overflow-y-auto pr-1 lg:h-56">
+          <div
+            ref={listRef}
+            className={
+              isFs
+                ? "mt-3 h-32 overflow-y-auto pr-1 landscape:max-lg:h-24 lg:h-auto lg:min-h-0 lg:flex-1"
+                : "mt-3 h-48 overflow-y-auto pr-1 lg:h-56"
+            }
+          >
             {history.length === 0 ? (
               <p className="flex h-full items-center justify-center text-center font-mono text-[11px] uppercase tracking-[0.16em] text-ink-400">
                 No moves yet — White begins
@@ -906,7 +976,19 @@ export const MatchRoom = forwardRef<MatchHandle, MatchRoomProps>(function MatchR
         </div>
 
         {/* controls */}
-        <div className="grid grid-cols-2 gap-2.5">
+        <div className={`grid grid-cols-2 gap-2.5 ${isFs ? "shrink-0" : ""}`}>
+          <button
+            onClick={handleToggleFs}
+            aria-label={isFs ? "Exit full screen" : "Enter full screen"}
+            className={`col-span-2 inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-lg text-[14px] font-bold tracking-tight transition-all duration-300 hover:-translate-y-[2px] ${
+              isFs
+                ? "bg-brass-500 text-ink-950 shadow-[0_10px_26px_-12px_rgb(207_159_61/0.65)] hover:bg-brass-400"
+                : "bg-ink-900 text-paper-50 hover:bg-ink-700 dark:bg-ink-100 dark:text-ink-950 dark:hover:bg-paper-200"
+            }`}
+          >
+            <FullscreenIcon className="h-4 w-4" />
+            {isFs ? "Exit Full Screen" : "Full Screen"}
+          </button>
           {onNewGame && (
             <button
               onClick={onNewGame}
