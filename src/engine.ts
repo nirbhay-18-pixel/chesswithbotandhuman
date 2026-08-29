@@ -1,3 +1,4 @@
+import { Chess } from "chess.js";
 import { searchPosition } from "./minimax";
 
 /**
@@ -195,15 +196,50 @@ export function initEngine(): Promise<EngineKind> {
   if (initPromise) return initPromise;
   sf = new StockfishWorker();
   initPromise = sf.init().then((ok) => {
-    kind = ok ? "stockfish" : "classic";
     if (!ok) sf = null;
-    return kind;
+    setEngineKind(ok ? "stockfish" : "classic");
+    return kind as EngineKind;
   });
   return initPromise;
 }
 
 export function getEngineKind(): EngineKind | null {
   return kind;
+}
+
+/* ---------------- engine-state subscriptions ---------------- */
+
+type KindListener = (k: EngineKind | null) => void;
+const kindListeners = new Set<KindListener>();
+
+export function subscribeEngineKind(listener: KindListener): () => void {
+  kindListeners.add(listener);
+  listener(kind); // replay current state immediately
+  return () => kindListeners.delete(listener);
+}
+
+function setEngineKind(next: EngineKind) {
+  if (kind === next) return;
+  kind = next;
+  kindListeners.forEach((fn) => fn(next));
+}
+
+/** Verify that a UCI move is legal in the given position; returns normalized UCI. */
+export function validateUci(fen: string, uci: string): string | null {
+  const from = uci.slice(0, 2);
+  const to = uci.slice(2, 4);
+  const promotion = uci.length > 4 ? uci[4] : undefined;
+  try {
+    const scratch = new Chess(fen);
+    const move = scratch.move({
+      from: from as never,
+      to: to as never,
+      ...(promotion ? { promotion: promotion as never } : {}),
+    });
+    return `${move.from}${move.to}${move.promotion ?? ""}`;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -233,19 +269,25 @@ export async function analyze(
   if (activeKind === "stockfish" && sf?.alive) {
     try {
       let lastCp = 20;
-      const uci = await sf.search(uciMoves, cfg.sfDepth, cfg.sfSkill, cfg.sfTimeMs, (cp: number, mate: boolean) => {
+      const rawUci = await sf.search(uciMoves, cfg.sfDepth, cfg.sfSkill, cfg.sfTimeMs, (cp: number, mate: boolean) => {
         lastCp = mate ? cp : Math.max(-1200, Math.min(1200, cp));
         onEval(Math.round(toWhite(lastCp)) / 100);
       });
-      return { uci, evalCp: toWhite(lastCp) / 100, depth: cfg.sfDepth, engine: "stockfish" };
+      const uci = validateUci(fen, rawUci);
+      if (uci) {
+        return { uci, evalCp: toWhite(lastCp) / 100, depth: cfg.sfDepth, engine: "stockfish" };
+      }
+      // Stockfish suggested an illegal move — fall through to classic.
     } catch {
       // engine hiccup — fall through to classic for this move
     }
   }
 
   const r = await classicSearch(fen, cfg.clDepth, cfg.clTimeMs, cfg.clTopK);
+  const uci = validateUci(fen, r.uci);
+  if (!uci) throw new Error("engine returned an illegal move");
   onEval(r.evalCp);
-  return { uci: r.uci, evalCp: r.evalCp, depth: r.depth, engine: "classic" };
+  return { uci, evalCp: r.evalCp, depth: r.depth, engine: "classic" };
 }
 
 /* ---------------- classic engine worker ---------------- */

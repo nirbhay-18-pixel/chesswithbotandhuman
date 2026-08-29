@@ -192,7 +192,8 @@ html.dark body {
   .animate-marquee,
   .animate-float,
   .animate-rise,
-  .animate-blink {
+  .animate-blink,
+  .animate-bounce {
     animation: none !important;
   }
   .piece-move { transition: none !important; }
