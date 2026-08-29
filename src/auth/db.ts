@@ -573,10 +573,13 @@ let db: AuthDb | null = null;
 
 export function getDb(): AuthDb {
   if (db) return db;
-  const env = (import.meta as unknown as { env: Record<string, string | undefined> }).env ?? {};
-  const url = env.VITE_SUPABASE_URL;
-  const key = env.VITE_SUPABASE_ANON_KEY;
-  db = url && key ? new SupabaseDb(url, key) : new LocalDb();
+  // Direct `import.meta.env` access — Vite statically inlines VITE_* values
+  // at build time (the production Supabase configuration). Without them the
+  // embedded IndexedDB database is used.
+  const url = import.meta.env.VITE_SUPABASE_URL;
+  const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const hasPlaceholders = !url || !key || url.includes("your-project-ref") || key.includes("your-anon");
+  db = !hasPlaceholders ? new SupabaseDb(url, key) : new LocalDb();
   return db;
 }
 
