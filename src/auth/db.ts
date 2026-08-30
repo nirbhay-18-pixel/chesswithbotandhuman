@@ -12,6 +12,8 @@ export interface AuthUser {
   email: string;
   username: string;
   rating: number;
+  /** highest rating ever reached — stored permanently in the database */
+  peakRating: number;
   createdAt: number;
 }
 
