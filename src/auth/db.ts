@@ -69,6 +69,8 @@ interface LocalUserRow {
   salt: string;
   iterations: number;
   rating: number;
+  /** added later — may be absent on rows created before peak tracking */
+  peakRating?: number;
   createdAt: number;
 }
 
@@ -147,6 +149,7 @@ class LocalDb implements AuthDb {
       email: row.email,
       username: row.displayName,
       rating: row.rating,
+      peakRating: row.peakRating ?? row.rating,
       createdAt: row.createdAt,
     };
   }
@@ -265,7 +268,9 @@ class LocalDb implements AuthDb {
       | LocalUserRow
       | undefined;
     if (!row) return;
-    row.rating = Math.max(100, Math.round(rating));
+    const next = Math.max(100, Math.round(rating));
+    row.peakRating = Math.max(row.peakRating ?? row.rating, next);
+    row.rating = next;
     const writeTx = db.transaction("users", "readwrite");
     writeTx.objectStore("users").put(row);
     await txDone(writeTx);
@@ -310,6 +315,7 @@ interface SbProfileRow {
   email: string;
   username: string;
   rating: number;
+  peak_rating: number | null;
   created_at: string;
 }
 
@@ -332,6 +338,21 @@ class SupabaseDb implements AuthDb {
       "Content-Type": "application/json",
       ...extra,
     };
+  }
+
+  /**
+   * Authenticated REST call against the database. If the access token has
+   * expired (HTTP 401), transparently refresh the session once and retry —
+   * so a user returning after days never sees a "please log in again" for
+   * a still-valid refresh token.
+   */
+  private async fetchAuthed(path: string, init: RequestInit = {}): Promise<Response> {
+    const doFetch = () => fetch(`${this.url}${path}`, { ...init, headers: this.headers() });
+    let res = await doFetch();
+    if (res.status === 401 && this.session && (await this.refreshTokens())) {
+      res = await doFetch();
+    }
+    return res;
   }
 
   private async post<T>(path: string, body: unknown, isAuth = false): Promise<T> {
@@ -398,9 +419,8 @@ class SupabaseDb implements AuthDb {
   }
 
   private async fetchProfile(userId: string): Promise<AuthUser> {
-    const res = await fetch(
-      `${this.url}/rest/v1/profiles?select=*&id=eq.${encodeURIComponent(userId)}`,
-      { headers: this.headers() },
+    const res = await this.fetchAuthed(
+      `/rest/v1/profiles?select=*&id=eq.${encodeURIComponent(userId)}`,
     );
     const rows = (await res.json().catch(() => [])) as SbProfileRow[];
     const row = rows[0];
@@ -410,6 +430,7 @@ class SupabaseDb implements AuthDb {
       email: row.email,
       username: row.username,
       rating: row.rating,
+      peakRating: row.peak_rating ?? row.rating,
       createdAt: new Date(row.created_at).getTime(),
     };
   }
@@ -501,17 +522,26 @@ class SupabaseDb implements AuthDb {
   }
 
   async updateRating(userId: string, rating: number): Promise<void> {
-    await fetch(`${this.url}/rest/v1/profiles?id=eq.${encodeURIComponent(userId)}`, {
+    const next = Math.max(100, Math.round(rating));
+    // read the current row so the all-time peak only ever moves upward
+    const current = await this.fetchAuthed(
+      `/rest/v1/profiles?select=rating,peak_rating&id=eq.${encodeURIComponent(userId)}`,
+    );
+    const rows = (await current.json().catch(() => [])) as Array<{
+      rating: number;
+      peak_rating: number | null;
+    }>;
+    const row = rows[0];
+    const peak = Math.max(row?.peak_rating ?? row?.rating ?? next, next);
+    await this.fetchAuthed(`/rest/v1/profiles?id=eq.${encodeURIComponent(userId)}`, {
       method: "PATCH",
-      headers: this.headers(),
-      body: JSON.stringify({ rating: Math.max(100, Math.round(rating)) }),
+      body: JSON.stringify({ rating: next, peak_rating: peak }),
     });
   }
 
   async saveGame(userId: string, record: GameRecord): Promise<void> {
-    const res = await fetch(`${this.url}/rest/v1/games`, {
+    const res = await this.fetchAuthed(`/rest/v1/games`, {
       method: "POST",
-      headers: this.headers(),
       body: JSON.stringify({
         id: record.id,
         user_id: userId,
@@ -532,9 +562,8 @@ class SupabaseDb implements AuthDb {
   }
 
   async getGames(userId: string): Promise<GameRecord[]> {
-    const res = await fetch(
-      `${this.url}/rest/v1/games?user_id=eq.${encodeURIComponent(userId)}&order=played_at.desc&limit=200&select=*`,
-      { headers: this.headers() },
+    const res = await this.fetchAuthed(
+      `/rest/v1/games?user_id=eq.${encodeURIComponent(userId)}&order=played_at.desc&limit=200&select=*`,
     );
     const rows = (await res.json().catch(() => [])) as Array<{
       id: string;

@@ -397,9 +397,10 @@ export function ProfilePage() {
       </header>
 
       {/* stats */}
-      <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
         {[
           { label: "Rating", value: String(stats?.rating ?? user.rating) },
+          { label: "Peak", value: String(user.peakRating) },
           { label: "Games", value: String(stats?.games ?? 0) },
           { label: "Wins", value: String(stats?.wins ?? 0) },
           { label: "Losses", value: String(stats?.losses ?? 0) },
