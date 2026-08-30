@@ -80,7 +80,8 @@ interface MatchRoomProps {
   onNewGame?: () => void;
   onViewGame?: (info: GameOverInfo) => void;
   onSaveGame?: (info: GameOverInfo) => void;
-  saveState?: "hidden" | "idle" | "saved";
+  /** friend mode: honest save lifecycle — the button never claims success early */
+  saveState?: "hidden" | "idle" | "saving" | "saved" | "failed";
   /** online: tell the parent to transmit our resignation */
   onResignLocal?: () => void;
   onDrawOffer?: () => void;
@@ -745,17 +746,39 @@ export const MatchRoom = forwardRef<MatchHandle, MatchRoomProps>(function MatchR
                 {resultExtras}
                 <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
                   {mode === "friend" && saveState !== "hidden" && onSaveGame && (
-                    <button
-                      onClick={() => onSaveGame(buildGameOver())}
-                      disabled={saveState === "saved"}
-                      className={`inline-flex h-11 cursor-pointer items-center gap-2 rounded-lg px-5 text-[15px] font-bold transition-all duration-300 ${
-                        saveState === "saved"
-                          ? "cursor-default border border-felt-500/50 bg-felt-500/15 text-felt-300"
-                          : "border border-ink-100/25 text-ink-100 hover:-translate-y-[2px] hover:border-brass-400 hover:text-brass-300"
-                      }`}
-                    >
-                      {saveState === "saved" ? "Saved ✓" : "Save Game"}
-                    </button>
+                    <span className="inline-flex flex-col items-center gap-1.5">
+                      <button
+                        onClick={() => {
+                          if (saveState !== "saving" && saveState !== "saved") onSaveGame(buildGameOver());
+                        }}
+                        disabled={saveState === "saving" || saveState === "saved"}
+                        className={`inline-flex h-11 cursor-pointer items-center gap-2 rounded-lg px-5 text-[15px] font-bold transition-all duration-300 ${
+                          saveState === "saved"
+                            ? "cursor-default border border-felt-500/50 bg-felt-500/15 text-felt-300"
+                            : saveState === "saving"
+                              ? "cursor-wait border border-brass-400/50 bg-brass-500/10 text-brass-300"
+                              : saveState === "failed"
+                                ? "border border-blunder/60 bg-blunder/10 text-[#e08a80] hover:-translate-y-[2px] hover:bg-blunder/20"
+                                : "border border-ink-100/25 text-ink-100 hover:-translate-y-[2px] hover:border-brass-400 hover:text-brass-300"
+                        }`}
+                      >
+                        {saveState === "saving" && (
+                          <span className="animate-pulse-dot h-1.5 w-1.5 rounded-full bg-brass-400" />
+                        )}
+                        {saveState === "saved"
+                          ? "Saved ✓"
+                          : saveState === "saving"
+                            ? "Saving…"
+                            : saveState === "failed"
+                              ? "Retry save"
+                              : "Save Game"}
+                      </button>
+                      {saveState === "failed" && (
+                        <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-[#e08a80]">
+                          Couldn't reach the database — tap to retry
+                        </p>
+                      )}
+                    </span>
                   )}
                   {onRematch && (
                     <button

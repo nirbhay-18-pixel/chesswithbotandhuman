@@ -1,15 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  applyRatingChange,
-  eloDelta,
-  makeGameId,
-  saveGame,
-  type GameRecord,
-} from "../account";
+import { eloDelta, makeGameId, type GameRecord } from "../account";
 import { useAuth } from "../auth/AuthContext";
 import { BOT_PERSONAS, BOT_RATINGS, getEngineKind, subscribeEngineKind, warmupEngine, type EngineKind } from "../engine";
 import { MatchRoom, type GameOverInfo, type MatchHandle, type PlayerInfo } from "../game/MatchRoom";
+import { PersistBadge, usePersistGame } from "../game/persist";
 import type { Side } from "../chess";
 import { ArrowRightIcon, CpuIcon, DiceIcon, RobotIcon } from "../components/icons";
 import { useFullscreen } from "../hooks";
@@ -33,6 +28,13 @@ export function BotPage() {
   const [savedRecord, setSavedRecord] = useState<GameRecord | null>(null);
   const matchRef = useRef<MatchHandle>(null);
   const startRatingRef = useRef(1200);
+  const {
+    phase: persistPhase,
+    stage: persistStage,
+    persist,
+    retry: persistRetry,
+    reset: resetPersist,
+  } = usePersistGame();
 
   useEffect(() => subscribeEngineKind(setEngineKind), []);
 
@@ -45,6 +47,12 @@ export function BotPage() {
   const { user, refresh } = useAuth();
   const botColor: Side = humanColor === "w" ? "b" : "w";
 
+  // once the rating + game record are safely stored, reload the session user
+  // so the navbar / profile show the true database values
+  useEffect(() => {
+    if (persistPhase === "saved") void refresh();
+  }, [persistPhase, refresh]);
+
   const startGame = () => {
     warmupEngine(); // idempotent — already loaded by now, keeps the first move instant
     const resolved: Side = colorChoice === "random" ? (Math.random() < 0.5 ? "w" : "b") : colorChoice;
@@ -52,6 +60,7 @@ export function BotPage() {
     startRatingRef.current = user?.rating ?? 1200;
     setRatingDelta(null);
     setSavedRecord(null);
+    resetPersist();
     setPhase("game");
   };
 
@@ -88,11 +97,10 @@ export function BotPage() {
         ratingBefore: before,
         ratingAfter: after,
       };
-      // persist rating + game record to the database, then refresh the session user
-      void applyRatingChange(session.id, after)
-        .then(() => saveGame(session.id, record as GameRecord))
-        .then(() => refresh())
-        .catch(() => undefined);
+      // persist rating + game record to the database (rating first, then the
+      // idempotent game upsert); failures surface in the result overlay with
+      // a retry instead of being swallowed
+      persist({ userId: session.id, record, newRating: after });
     }
     setRatingDelta(session ? delta : null);
     setSavedRecord(record);
@@ -102,6 +110,7 @@ export function BotPage() {
     startRatingRef.current = user?.rating ?? 1200;
     setRatingDelta(null);
     setSavedRecord(null);
+    resetPersist();
     matchRef.current?.reset();
   };
 
@@ -285,22 +294,34 @@ export function BotPage() {
             }
             resultExtras={
               ratingDelta !== null ? (
-                <div className="flex items-center gap-4 rounded-lg border border-ink-100/15 bg-ink-900/60 px-5 py-3">
-                  <div className="text-left">
-                    <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-400">Your rating</p>
-                    <p className="font-display text-xl font-bold text-ink-100">
-                      {startRatingRef.current}
-                      <ArrowRightIcon className="mx-2 inline h-4 w-4 text-ink-400" />
-                      {Math.max(100, startRatingRef.current + ratingDelta)}
-                    </p>
-                  </div>
-                  <span
-                    className={`rounded-md px-2.5 py-1 font-mono text-sm font-bold ${
-                      ratingDelta >= 0 ? "bg-felt-500/20 text-felt-300" : "bg-blunder/20 text-[#e08a80]"
-                    }`}
-                  >
-                    {ratingDelta >= 0 ? `+${ratingDelta}` : ratingDelta}
-                  </span>
+                <div className="flex flex-col items-center gap-2.5">
+                  {/* hide the rating strip when the rating write failed — the
+                      database still holds the old rating, so claiming the new
+                      one would be false */}
+                  {!(persistPhase === "failed" && persistStage === "rating") && (
+                    <div
+                      className={`flex items-center gap-4 rounded-lg border border-ink-100/15 bg-ink-900/60 px-5 py-3 transition-opacity duration-300 ${
+                        persistPhase === "saving" ? "opacity-70" : ""
+                      }`}
+                    >
+                      <div className="text-left">
+                        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-400">Your rating</p>
+                        <p className="font-display text-xl font-bold text-ink-100">
+                          {startRatingRef.current}
+                          <ArrowRightIcon className="mx-2 inline h-4 w-4 text-ink-400" />
+                          {Math.max(100, startRatingRef.current + ratingDelta)}
+                        </p>
+                      </div>
+                      <span
+                        className={`rounded-md px-2.5 py-1 font-mono text-sm font-bold ${
+                          ratingDelta >= 0 ? "bg-felt-500/20 text-felt-300" : "bg-blunder/20 text-[#e08a80]"
+                        }`}
+                      >
+                        {ratingDelta >= 0 ? `+${ratingDelta}` : ratingDelta}
+                      </span>
+                    </div>
+                  )}
+                  <PersistBadge phase={persistPhase} stage={persistStage} onRetry={persistRetry} />
                 </div>
               ) : (
                 <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-400">

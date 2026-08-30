@@ -346,8 +346,13 @@ class SupabaseDb implements AuthDb {
    * so a user returning after days never sees a "please log in again" for
    * a still-valid refresh token.
    */
-  private async fetchAuthed(path: string, init: RequestInit = {}): Promise<Response> {
-    const doFetch = () => fetch(`${this.url}${path}`, { ...init, headers: this.headers() });
+  private async fetchAuthed(
+    path: string,
+    init: RequestInit = {},
+    extraHeaders: Record<string, string> = {},
+  ): Promise<Response> {
+    const doFetch = () =>
+      fetch(`${this.url}${path}`, { ...init, headers: this.headers(extraHeaders) });
     let res = await doFetch();
     if (res.status === 401 && this.session && (await this.refreshTokens())) {
       res = await doFetch();
@@ -523,41 +528,62 @@ class SupabaseDb implements AuthDb {
 
   async updateRating(userId: string, rating: number): Promise<void> {
     const next = Math.max(100, Math.round(rating));
-    // read the current row so the all-time peak only ever moves upward
+    // Preferred path: the atomic `update_rating` server function maintains
+    // rating + peak in a single statement (the peak can only move upward),
+    // which is safe even under concurrent updates from multiple devices.
+    const rpc = await this.fetchAuthed("/rest/v1/rpc/update_rating", {
+      method: "POST",
+      body: JSON.stringify({ p_rating: next }),
+    });
+    if (rpc.ok) return;
+    // A 404 means the function doesn't exist yet (schema not re-run after an
+    // update) — fall back to a checked read→patch; anything else is a real
+    // failure and must surface to the caller.
+    if (rpc.status !== 404) {
+      throw new AuthError("Could not update your rating — please retry.");
+    }
     const current = await this.fetchAuthed(
       `/rest/v1/profiles?select=rating,peak_rating&id=eq.${encodeURIComponent(userId)}`,
     );
+    if (!current.ok) throw new AuthError("Could not update your rating — please retry.");
     const rows = (await current.json().catch(() => [])) as Array<{
       rating: number;
       peak_rating: number | null;
     }>;
     const row = rows[0];
     const peak = Math.max(row?.peak_rating ?? row?.rating ?? next, next);
-    await this.fetchAuthed(`/rest/v1/profiles?id=eq.${encodeURIComponent(userId)}`, {
+    const patch = await this.fetchAuthed(`/rest/v1/profiles?id=eq.${encodeURIComponent(userId)}`, {
       method: "PATCH",
       body: JSON.stringify({ rating: next, peak_rating: peak }),
     });
+    if (!patch.ok) throw new AuthError("Could not update your rating — please retry.");
   }
 
   async saveGame(userId: string, record: GameRecord): Promise<void> {
-    const res = await this.fetchAuthed(`/rest/v1/games`, {
-      method: "POST",
-      body: JSON.stringify({
-        id: record.id,
-        user_id: userId,
-        mode: record.mode,
-        my_color: record.myColor,
-        my_name: record.myName,
-        opponent: record.opponent,
-        bot_rating: record.botRating ?? null,
-        result: record.result,
-        score: record.score,
-        sans: record.sans,
-        rating_before: record.ratingBefore ?? null,
-        rating_after: record.ratingAfter ?? null,
-        played_at: new Date(record.date).toISOString(),
-      }),
-    });
+    // Idempotent upsert keyed on the game's stable id: a retried save merges
+    // into the existing row instead of creating a duplicate.
+    const res = await this.fetchAuthed(
+      `/rest/v1/games`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          id: record.id,
+          user_id: userId,
+          mode: record.mode,
+          my_color: record.myColor,
+          my_name: record.myName,
+          opponent: record.opponent,
+          bot_rating: record.botRating ?? null,
+          result: record.result,
+          score: record.score,
+          sans: record.sans,
+          rating_before: record.ratingBefore ?? null,
+          rating_after: record.ratingAfter ?? null,
+          played_at: new Date(record.date).toISOString(),
+        }),
+      },
+      { Prefer: "resolution=merge-duplicates,return=minimal" },
+    );
     if (!res.ok) throw new AuthError("Could not save the game to the database.");
   }
 

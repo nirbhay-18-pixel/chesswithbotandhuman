@@ -1,9 +1,10 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { makeGameId, saveGame, type GameRecord } from "../account";
+import { makeGameId, type GameRecord } from "../account";
 import { useAuth } from "../auth/AuthContext";
 import type { Side } from "../chess";
 import { MatchRoom, type GameOverInfo, type MatchHandle } from "../game/MatchRoom";
+import { usePersistGame } from "../game/persist";
 import { ArrowRightIcon, UsersIcon } from "../components/icons";
 import { useFullscreen } from "../hooks";
 
@@ -24,9 +25,11 @@ export function FriendPage() {
   const [p1Name, setP1Name] = useState("Player 1");
   const [p2Name, setP2Name] = useState("Player 2");
 
-  const [saveState, setSaveState] = useState<"hidden" | "idle" | "saved">("hidden");
   const [savedRecord, setSavedRecord] = useState<GameRecord | null>(null);
   const pendingInfo = useRef<GameOverInfo | null>(null);
+  /** one stable record per game — retries reuse the id, so no duplicates */
+  const pendingRecord = useRef<GameRecord | null>(null);
+  const { phase: persistPhase, persist, reset: resetPersist } = usePersistGame();
   const matchRef = useRef<MatchHandle>(null);
 
   const start = () => {
@@ -39,9 +42,10 @@ export function FriendPage() {
     setError(null);
     setP1Name(n1);
     setP2Name(n2);
-    setSaveState(session ? "idle" : "hidden");
+    resetPersist();
     setSavedRecord(null);
     pendingInfo.current = null;
+    pendingRecord.current = null;
     setPhase("game");
   };
 
@@ -52,35 +56,39 @@ export function FriendPage() {
   const handleSave = (info: GameOverInfo) => {
     const user = session;
     if (!user) return;
-    // the logged-in player's perspective: match by name, else assume White (seat 1)
-    const myColor: Side =
-      user.username.toLowerCase() === p2Name.toLowerCase()
-        ? "b"
-        : user.username.toLowerCase() === p1Name.toLowerCase()
-          ? "w"
-          : "w";
-    const opponent = myColor === "w" ? p2Name : p1Name;
-    const result = !info.winner ? "draw" : info.winner === myColor ? "win" : "loss";
-    const record: GameRecord = {
-      id: makeGameId(),
-      mode: "friend",
-      date: Date.now(),
-      myColor,
-      myName: user.username,
-      opponent,
-      result: result as GameRecord["result"],
-      score: scoreOf(info),
-      sans: info.sans,
-    };
-    void saveGame(user.id, record).catch(() => undefined);
-    setSavedRecord(record);
-    setSaveState("saved");
+    // Build the record exactly once per game — a failed save that is retried
+    // reuses the same id, and the database upsert keeps it a single row.
+    if (!pendingRecord.current) {
+      // the logged-in player's perspective: match by name, else assume White (seat 1)
+      const myColor: Side =
+        user.username.toLowerCase() === p2Name.toLowerCase()
+          ? "b"
+          : user.username.toLowerCase() === p1Name.toLowerCase()
+            ? "w"
+            : "w";
+      const opponent = myColor === "w" ? p2Name : p1Name;
+      const result = !info.winner ? "draw" : info.winner === myColor ? "win" : "loss";
+      pendingRecord.current = {
+        id: makeGameId(),
+        mode: "friend",
+        date: Date.now(),
+        myColor,
+        myName: user.username,
+        opponent,
+        result: result as GameRecord["result"],
+        score: scoreOf(info),
+        sans: info.sans,
+      };
+    }
+    setSavedRecord(pendingRecord.current); // replay works from memory either way
+    persist({ userId: user.id, record: pendingRecord.current });
   };
 
   const rematch = () => {
-    setSaveState(session ? "idle" : "hidden");
+    resetPersist();
     setSavedRecord(null);
     pendingInfo.current = null;
+    pendingRecord.current = null;
     matchRef.current?.reset();
   };
 
@@ -180,7 +188,7 @@ export function FriendPage() {
             onRematch={rematch}
             onNewGame={() => setPhase("setup")}
             onSaveGame={handleSave}
-            saveState={saveState}
+            saveState={session ? persistPhase : "hidden"}
             onViewGame={
               savedRecord
                 ? () => navigate("/profile", { state: { replay: savedRecord.id } })

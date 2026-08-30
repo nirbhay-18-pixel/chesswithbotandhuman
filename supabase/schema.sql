@@ -82,8 +82,35 @@ create policy "games: create own" on public.games for insert with check (auth.ui
 create policy "games: update own" on public.games for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "games: delete own" on public.games for delete using (auth.uid() = user_id);
 
+-- ----------------------------------------------------------------------------
+-- 3. update_rating — atomic rating maintenance
+--    Updates the caller's rating and all-time peak in ONE statement, so the
+--    peak can never move downward and concurrent updates from two devices
+--    cannot corrupt it (no client-side read-modify-write race).
+--    Runs as SECURITY INVOKER: the profiles RLS update policy still applies,
+--    so a caller can only ever modify their own row.
+-- ----------------------------------------------------------------------------
+create or replace function public.update_rating(p_rating integer)
+returns void
+language sql
+security invoker
+set search_path = public
+as $$
+  update public.profiles
+     set rating      = greatest(100, p_rating),
+         peak_rating = greatest(peak_rating, greatest(100, p_rating))
+   where id = auth.uid();
+$$;
+
+revoke all on function public.update_rating(integer) from public;
+grant execute on function public.update_rating(integer) to authenticated;
+
 -- ============================================================================
 -- Done. The frontend needs only:
 --   VITE_SUPABASE_URL       = your project URL
 --   VITE_SUPABASE_ANON_KEY  = the public anon/publishable key
+--
+-- Note: game inserts from the client use an idempotent upsert
+-- (Prefer: resolution=merge-duplicates on the games primary key), so a
+-- retried save can never create duplicate rows.
 -- ============================================================================
